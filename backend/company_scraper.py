@@ -2,18 +2,22 @@
 Engine 1 — Company DNA Extractor
 Scrapes a brand website and builds a deep profile:
 tone, services, projects, audience, writing style, keywords used.
-This is what makes every generated article sound like IT came from THEM.
+
+Discovery strategy (in order):
+  1. sitemap.xml  — most reliable, exposes all URLs the site wants indexed
+  2. Homepage link crawl — finds every internal link, auto-classifies by path keywords
+  3. Auto-detect listing pages — any nav page with 3+ sub-links is treated as a blog/portfolio
 """
 
 import asyncio
 import re
 import json
+import httpx
 from dataclasses import dataclass, field, asdict
 from typing import Optional
 from urllib.parse import urljoin, urlparse
-from collections import Counter
+from collections import Counter, defaultdict
 
-import httpx
 from playwright.async_api import async_playwright
 
 # ── spaCy for NLP (free, local) ──────────────────────────────────────────────
@@ -37,76 +41,195 @@ class CompanyDNA:
     tagline: str = ""
     description: str = ""
 
-    # What they do
     services: list[str] = field(default_factory=list)
     industries_served: list[str] = field(default_factory=list)
     locations: list[str] = field(default_factory=list)
 
-    # Who they are
-    tone_adjectives: list[str] = field(default_factory=list)   # e.g. ["professional", "warm", "technical"]
-    tone_sample: str = ""          # A real sentence from their site showing their voice
-    avg_sentence_length: int = 15  # Words per sentence in their writing
-    uses_first_person: bool = True # "We deliver..." vs "Our team delivers..."
+    tone_adjectives: list[str] = field(default_factory=list)
+    tone_sample: str = ""
+    avg_sentence_length: int = 15
+    uses_first_person: bool = True
 
-    # Their audience
-    target_audience: str = ""      # e.g. "homeowners in Bangalore planning renovation"
+    target_audience: str = ""
     pain_points: list[str] = field(default_factory=list)
 
-    # Their content
     existing_article_titles: list[str] = field(default_factory=list)
-    existing_article_topics: list[str] = field(default_factory=list)  # Broader themes
+    existing_article_topics: list[str] = field(default_factory=list)
     top_keywords: list[str] = field(default_factory=list)
-    brand_keywords: list[str] = field(default_factory=list)  # Words unique to this brand
+    brand_keywords: list[str] = field(default_factory=list)
 
-    # Projects / case studies / portfolio
-    portfolio_items: list[dict] = field(default_factory=list)  # {"title": ..., "description": ...}
+    portfolio_items: list[dict] = field(default_factory=list)
 
-    # Social proof
     testimonials: list[str] = field(default_factory=list)
     notable_clients: list[str] = field(default_factory=list)
 
-    # USPs (what makes them different)
     usps: list[str] = field(default_factory=list)
 
-    # Raw pages for context
     about_text: str = ""
     homepage_text: str = ""
 
 
-# ── Page paths to try for each section ───────────────────────────────────────
+# ── Section classification keywords ──────────────────────────────────────────
+# Maps section type → keywords that can appear anywhere in the URL path segment.
+# Order matters: more specific sections listed first.
 
-SECTION_PATHS = {
-    "about":      ["/about", "/about-us", "/our-story", "/who-we-are", "/company"],
-    "services":   ["/services", "/what-we-do", "/solutions", "/offerings", "/work"],
-    "portfolio":  ["/portfolio", "/projects", "/case-studies", "/gallery", "/work", "/our-work"],
-    "blog":       ["/blog", "/insights", "/articles", "/news", "/resources", "/stories"],
-    "contact":    ["/contact", "/contact-us"],
+SECTION_SIGNALS: dict[str, list[str]] = {
+    "about": [
+        "about", "about-us", "aboutus", "our-story", "ourstory",
+        "who-we-are", "whoweare", "company", "team", "our-team",
+        "founders", "mission", "vision", "history",
+    ],
+    "services": [
+        "services", "service", "what-we-do", "whatwedo",
+        "solutions", "solution", "offerings", "offering",
+        "capabilities", "capability", "expertise",
+    ],
+    "portfolio": [
+        "portfolio", "projects", "project", "case-studies", "casestudies",
+        "case-study", "gallery", "our-work", "ourwork", "showcase",
+        "clients", "references",
+    ],
+    "blog": [
+        "blog", "blogs", "insights", "insight", "articles", "article",
+        "news", "resources", "resource", "stories", "story",
+        "journal", "updates", "update", "thinking", "perspectives",
+        "perspective", "posts", "post", "guides", "guide",
+        "tutorials", "tutorial", "tips", "tip", "knowledge",
+        "learn", "learning", "media", "press", "publications",
+        "publication", "editorial", "thought-leadership",
+    ],
+    "contact": [
+        "contact", "contact-us", "contactus", "get-in-touch",
+        "getintouch", "hire", "reach", "enquiry", "inquiry",
+    ],
 }
 
-ARTICLE_PATTERNS = re.compile(
-    r"/(blog|insights|articles|news|resources|stories|posts|guides)/[^/]+$",
-    re.IGNORECASE,
-)
+# Segments that are NOT content pages (skip them)
+SKIP_SEGMENTS = {
+    "tag", "tags", "category", "categories", "author", "authors",
+    "page", "wp-content", "wp-admin", "wp-includes", "wp-json",
+    "feed", "rss", "atom", "cdn", "assets", "static", "media",
+    "uploads", "images", "img", "css", "js", "fonts",
+    "search", "404", "500", "sitemap", "robots",
+    "login", "logout", "register", "admin", "dashboard",
+    "cart", "checkout", "account", "wishlist",
+    "privacy", "terms", "disclaimer", "cookie",
+    "amp", "m",  # mobile/AMP subdomains sometimes appear as paths
+}
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def clean_text(text: str) -> str:
-    """Remove excessive whitespace and non-printable characters."""
     text = re.sub(r"\s+", " ", text)
     text = re.sub(r"[^\x20-\x7E\n]", "", text)
     return text.strip()
 
 
+def classify_path(path: str) -> Optional[str]:
+    """Return the section type for a URL path, or None if unrecognised."""
+    segments = path.lower().strip("/").split("/")
+    for seg in segments:
+        seg_clean = seg.split("?")[0].split("#")[0]
+        for section, signals in SECTION_SIGNALS.items():
+            if seg_clean in signals:
+                return section
+            # Also partial match: e.g. "blogpost" → blog
+            for signal in signals:
+                if signal in seg_clean and len(signal) > 4:
+                    return section
+    return None
+
+
+def is_listing_url(path: str) -> bool:
+    """True if path looks like a listing/index page (1-2 segments), not an article."""
+    parts = path.strip("/").split("/")
+    return len(parts) <= 2
+
+
+def is_article_url(path: str) -> bool:
+    """True if path looks like a single article (2+ segments, last part is a slug)."""
+    parts = path.strip("/").split("/")
+    if len(parts) < 2:
+        return False
+    slug = parts[-1]
+    return bool(slug) and not slug.isdigit() and len(slug) > 3
+
+
+# ── Sitemap parser ────────────────────────────────────────────────────────────
+
+async def fetch_sitemap(base_url: str, domain: str) -> list[str]:
+    """
+    Try common sitemap paths. Returns a flat list of all URLs found.
+    Handles both sitemap.xml and sitemap_index.xml (nested sitemaps).
+    """
+    candidates = [
+        f"{base_url}/sitemap.xml",
+        f"{base_url}/sitemap_index.xml",
+        f"{base_url}/sitemap-0.xml",
+        f"{base_url}/wp-sitemap.xml",
+        f"{base_url}/news-sitemap.xml",
+        f"{base_url}/post-sitemap.xml",
+        f"{base_url}/page-sitemap.xml",
+    ]
+    urls: list[str] = []
+
+    try:
+        async with httpx.AsyncClient(
+            timeout=12,
+            follow_redirects=True,
+            headers={"User-Agent": "Mozilla/5.0 (compatible; SearchOS/1.0)"},
+        ) as client:
+            for sitemap_url in candidates:
+                try:
+                    resp = await client.get(sitemap_url)
+                    if resp.status_code != 200:
+                        continue
+                    text = resp.text
+
+                    # Sitemap index: contains <sitemap> tags pointing to sub-sitemaps
+                    if "<sitemapindex" in text or ("<sitemap>" in text and "<loc>" in text):
+                        sub_locs = re.findall(r"<loc>\s*(https?://[^<]+)\s*</loc>", text)
+                        for sub in sub_locs[:6]:
+                            if "sitemap" in sub.lower():
+                                try:
+                                    r2 = await client.get(sub)
+                                    if r2.status_code == 200:
+                                        locs = re.findall(r"<loc>\s*(https?://[^<]+)\s*</loc>", r2.text)
+                                        same_domain = [u for u in locs if domain in u]
+                                        urls.extend(same_domain[:150])
+                                except Exception:
+                                    pass
+                        if urls:
+                            print(f"[DNA] Sitemap index: {len(urls)} URLs")
+                            break
+
+                    # Regular sitemap: contains <url><loc>...</loc></url>
+                    elif "<urlset" in text or "<url>" in text:
+                        locs = re.findall(r"<loc>\s*(https?://[^<]+)\s*</loc>", text)
+                        same_domain = [u for u in locs if domain in u]
+                        urls.extend(same_domain[:300])
+                        if urls:
+                            print(f"[DNA] Sitemap: {sitemap_url} ({len(urls)} URLs)")
+                            break
+
+                except Exception:
+                    continue
+    except Exception:
+        pass
+
+    return urls
+
+
+# ── NLP helpers (unchanged) ───────────────────────────────────────────────────
+
 def extract_keywords_spacy(texts: list[str], top_n: int = 30) -> list[str]:
-    """Extract meaningful noun phrases and entities using spaCy."""
     if not NLP_AVAILABLE or not texts:
         return extract_keywords_simple(texts, top_n)
 
     combined = " ".join(texts[:10])[:50000]
     doc = nlp(combined)
 
-    # Noun chunks — 1-3 words, must not start with an article/determiner
     _det = {"the", "a", "an", "our", "your", "their", "this", "that",
             "its", "my", "we", "all", "each", "every", "more"}
     phrases = [chunk.text.lower().strip() for chunk in doc.noun_chunks
@@ -115,10 +238,6 @@ def extract_keywords_spacy(texts: list[str], top_n: int = 30) -> list[str]:
     entities = [ent.text.lower().strip() for ent in doc.ents
                 if ent.label_ not in ("DATE", "TIME", "CARDINAL", "ORDINAL")]
 
-    all_terms = phrases + entities
-    counts = Counter(all_terms)
-
-    # Extended stopwords: includes common UI/nav words that pollute website scrapes
     stopwords = {
         "the", "a", "an", "this", "that", "our", "your", "we", "they",
         "it", "its", "is", "are", "was", "were", "be", "been", "being",
@@ -127,20 +246,19 @@ def extract_keywords_spacy(texts: list[str], top_n: int = 30) -> list[str]:
         "more", "most", "also", "just", "very", "all", "any", "both",
         "each", "few", "other", "some", "such", "than", "too",
         "one", "two", "three", "way", "ways",
-        # UI / navigation words found on websites
         "view", "skip", "content", "click", "explore", "read", "learn",
         "find", "know", "back", "next", "prev", "menu", "home", "page",
         "contact", "about", "work", "more", "less", "show", "hide",
         "submit", "send", "close", "open", "link", "button",
     }
 
+    counts = Counter(phrases + entities)
     return [term for term, _ in counts.most_common(top_n * 2)
             if term not in stopwords and len(term) > 3
             and not term.startswith(("http", "www"))][:top_n]
 
 
 def extract_keywords_simple(texts: list[str], top_n: int = 30) -> list[str]:
-    """Fallback keyword extraction without spaCy."""
     combined = " ".join(texts).lower()
     words = re.findall(r"\b[a-z]{4,}\b", combined)
     stopwords = {
@@ -148,7 +266,6 @@ def extract_keywords_simple(texts: list[str], top_n: int = 30) -> list[str]:
         "their", "what", "when", "where", "which", "your", "about",
         "more", "also", "into", "over", "after", "some", "than", "then",
         "these", "those", "such", "each", "both", "many", "most", "much",
-        # UI words
         "view", "skip", "content", "click", "explore", "read", "learn",
         "find", "know", "back", "next", "prev", "menu", "home", "page",
         "contact", "submit", "send", "close", "open", "link",
@@ -158,10 +275,6 @@ def extract_keywords_simple(texts: list[str], top_n: int = 30) -> list[str]:
 
 
 def infer_tone(texts: list[str]) -> tuple[list[str], str, int, bool]:
-    """
-    Analyse writing style.
-    Returns: (tone_adjectives, sample_sentence, avg_words_per_sentence, uses_first_person)
-    """
     combined = " ".join(texts)
     sentences = re.split(r"[.!?]+", combined)
     sentences = [s.strip() for s in sentences if len(s.split()) > 5]
@@ -169,14 +282,10 @@ def infer_tone(texts: list[str]) -> tuple[list[str], str, int, bool]:
     if not sentences:
         return ["professional"], "", 15, True
 
-    # Average sentence length
     avg_len = int(sum(len(s.split()) for s in sentences) / max(len(sentences), 1))
-
-    # First person detection
     fp_count = sum(1 for s in sentences if re.search(r"\bwe\b|\bour\b|\bus\b", s, re.I))
     uses_first_person = fp_count > len(sentences) * 0.3
 
-    # Tone adjectives (heuristic)
     tone = []
     if avg_len < 14:
         tone.append("concise")
@@ -189,19 +298,16 @@ def infer_tone(texts: list[str]) -> tuple[list[str], str, int, bool]:
         r"affordable|budget|transform|reimagine|elevate)\b",
         combined, re.I
     )
-    if any(t.lower() in ("premium", "bespoke", "luxury", "curated", "crafted")
-           for t in technical_terms):
+    if any(t.lower() in ("premium", "bespoke", "luxury", "curated", "crafted") for t in technical_terms):
         tone.append("premium")
     if any(t.lower() in ("affordable", "budget") for t in technical_terms):
         tone.append("value-focused")
-    if any(t.lower() in ("transform", "reimagine", "elevate", "innovation")
-           for t in technical_terms):
+    if any(t.lower() in ("transform", "reimagine", "elevate", "innovation") for t in technical_terms):
         tone.append("aspirational")
 
     if not tone:
         tone = ["professional", "helpful"]
 
-    # Pick a sample sentence that best shows their voice
     good_samples = [s for s in sentences
                     if 10 < len(s.split()) < 30 and not s.lower().startswith("cookie")]
     sample = good_samples[0] if good_samples else (sentences[0] if sentences else "")
@@ -210,7 +316,6 @@ def infer_tone(texts: list[str]) -> tuple[list[str], str, int, bool]:
 
 
 def extract_usps(texts: list[str]) -> list[str]:
-    """Look for USP-style sentences: years of experience, awards, guarantees, etc."""
     patterns = [
         r"(\d+\+?\s+years?\s+(?:of\s+)?(?:experience|expertise)[^.!?]*[.!?])",
         r"(over\s+\d+\s+(?:projects?|clients?|homes?|spaces?)[^.!?]*[.!?])",
@@ -232,20 +337,30 @@ def extract_usps(texts: list[str]) -> list[str]:
 # ── Core scraping function ────────────────────────────────────────────────────
 
 async def extract_company_dna(base_url: str) -> CompanyDNA:
-    """
-    Main entry point. Scrapes the brand website and returns a CompanyDNA object.
-    """
     base_url = base_url.rstrip("/")
-    domain = urlparse(base_url).netloc
-    dna = CompanyDNA(domain=domain)
+    parsed_base = urlparse(base_url)
+    domain = parsed_base.netloc  # e.g. "example.com" or "www.example.com"
 
+    dna = CompanyDNA(domain=domain)
     print(f"\n[DNA] Extracting company profile from: {base_url}")
 
-    page_contents: dict[str, str] = {}  # section_name → text
+    page_contents: dict[str, str] = {}
     article_titles: list[str] = []
-    article_texts: list[str] = []
+    article_texts:  list[str] = []
     portfolio_items: list[dict] = []
 
+    # ── Step 1: Sitemap (fast, no browser) ───────────────────────────────────
+    sitemap_urls = await fetch_sitemap(base_url, domain)
+
+    # Build section → candidate URLs from sitemap
+    sitemap_by_section: dict[str, list[str]] = defaultdict(list)
+    for url in sitemap_urls:
+        path = urlparse(url).path
+        section = classify_path(path)
+        if section:
+            sitemap_by_section[section].append(url)
+
+    # ─────────────────────────────────────────────────────────────────────────
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True)
         context = await browser.new_context(
@@ -256,26 +371,24 @@ async def extract_company_dna(base_url: str) -> CompanyDNA:
             ),
             viewport={"width": 1280, "height": 900},
         )
-        # Block images/media for speed
         await context.route("**/*", lambda route: route.abort()
             if route.request.resource_type in ("image", "media", "font")
             else route.continue_())
 
         page = await context.new_page()
 
-        async def scrape_url(url: str, label: str = "") -> str:
-            """Scrape a single URL and return its visible text."""
+        async def scrape(url: str, label: str = "") -> str:
             try:
                 await asyncio.sleep(0.8)
                 resp = await page.goto(url, wait_until="domcontentloaded", timeout=20000)
                 if not resp or resp.status >= 400:
                     return ""
-                # Get all visible text, exclude nav/footer noise
                 text = await page.evaluate("""() => {
-                    const remove = ['nav', 'footer', 'header', 'script',
-                                    'style', 'noscript', '.cookie', '#cookie'];
-                    remove.forEach(sel => {
-                        document.querySelectorAll(sel).forEach(el => el.remove());
+                    ['nav','footer','header','script','style','noscript',
+                     '.cookie','#cookie','[class*="cookie"]','[id*="cookie"]',
+                     '[class*="popup"]','[class*="modal"]'].forEach(sel => {
+                        try { document.querySelectorAll(sel)
+                              .forEach(el => el.remove()); } catch(e){}
                     });
                     return document.body ? document.body.innerText : '';
                 }""")
@@ -284,62 +397,237 @@ async def extract_company_dna(base_url: str) -> CompanyDNA:
                 print(f"[DNA] Could not scrape {url}: {e}")
                 return ""
 
-        # ── Homepage ──────────────────────────────────────────────────────────
+        async def get_page_links() -> list[dict]:
+            """Get all links from the currently loaded page."""
+            try:
+                return await page.eval_on_selector_all(
+                    "a[href]",
+                    "els => els.map(e => ({href: e.href||'', text:(e.innerText||'').trim()}))",
+                )
+            except Exception:
+                return []
+
+        def is_same_domain(url: str) -> bool:
+            n = urlparse(url).netloc
+            return n == domain or n.endswith("." + domain) or domain.endswith("." + n)
+
+        # ── Step 2: Homepage ─────────────────────────────────────────────────
         print("[DNA] Scraping homepage...")
-        homepage_text = await scrape_url(base_url, "homepage")
+        homepage_text = await scrape(base_url, "homepage")
         dna.homepage_text = homepage_text[:3000]
         page_contents["homepage"] = homepage_text
 
-        # Try to extract company name from title
         try:
             title = await page.title()
             dna.name = title.split("|")[0].split("–")[0].split("-")[0].strip()
         except Exception:
             dna.name = domain.replace("www.", "").split(".")[0].title()
 
-        # ── Section pages ─────────────────────────────────────────────────────
-        for section, paths in SECTION_PATHS.items():
+        # ── Step 3: Discover all internal links from homepage ────────────────
+        all_home_links = await get_page_links()
+
+        # Group links by first path segment
+        nav_segments: dict[str, list[dict]] = defaultdict(list)
+        for link in all_home_links:
+            href = link["href"]
+            if not is_same_domain(href):
+                continue
+            path = urlparse(href).path.rstrip("/")
+            parts = path.strip("/").split("/")
+            seg = parts[0].lower() if parts and parts[0] else ""
+            if seg and seg not in SKIP_SEGMENTS:
+                nav_segments[seg].append({"href": href, "text": link["text"]})
+
+        print(f"[DNA] Discovered segments: {list(nav_segments.keys())[:20]}")
+
+        # ── Step 4: Build per-section candidate URL lists ────────────────────
+        # Priority: sitemap > homepage nav discovery > hardcoded fallback
+        section_candidates: dict[str, list[str]] = defaultdict(list)
+        queued: set[str] = set()
+
+        def queue(section: str, url: str):
+            u = url.split("?")[0].split("#")[0].rstrip("/")
+            if u and u not in queued:
+                queued.add(u)
+                section_candidates[section].append(u)
+
+        # Sitemap-derived
+        for section, urls in sitemap_by_section.items():
+            for url in urls:
+                queue(section, url)
+
+        # Homepage-nav-derived
+        for seg, links in nav_segments.items():
+            sec = classify_path(seg)
+            if sec:
+                for link in links:
+                    queue(sec, link["href"])
+
+        # Hardcoded fallbacks
+        FALLBACKS: dict[str, list[str]] = {
+            "about":    ["/about", "/about-us", "/our-story", "/who-we-are", "/company", "/team", "/our-team"],
+            "services": ["/services", "/what-we-do", "/solutions", "/offerings", "/capabilities"],
+            "portfolio":["/portfolio", "/projects", "/case-studies", "/gallery", "/work", "/our-work"],
+            "blog":     ["/blog", "/insights", "/articles", "/news", "/resources", "/stories",
+                         "/journal", "/updates", "/thinking", "/posts", "/guides", "/tutorials",
+                         "/tips", "/knowledge", "/media", "/press", "/publications"],
+            "contact":  ["/contact", "/contact-us", "/get-in-touch"],
+        }
+        for section, paths in FALLBACKS.items():
             for path in paths:
-                url = urljoin(base_url, path)
+                queue(section, urljoin(base_url, path))
+
+        # ── Step 5: Scrape each section ──────────────────────────────────────
+        for section in ["about", "services", "portfolio", "blog", "contact"]:
+            candidates = section_candidates.get(section, [])
+            # Try listing URLs first (shorter paths), skip deep article URLs
+            listing_first = sorted(
+                [u for u in candidates if is_listing_url(urlparse(u).path)],
+                key=lambda u: len(urlparse(u).path)
+            )
+            for url in listing_first[:8]:
                 print(f"[DNA] Trying {section}: {url}")
-                text = await scrape_url(url, section)
+                text = await scrape(url, section)
                 if len(text) > 200:
                     page_contents[section] = text
-                    print(f"[DNA]   OK Got {len(text)} chars for {section}")
+                    print(f"[DNA]   OK {len(text)} chars")
                     break
 
-        # ── Blog articles (grab top 5 for style analysis) ─────────────────────
+        # ── Step 6: Discover articles (3-layer strategy) ─────────────────────
+
+        discovered_articles: list[dict] = []
+
+        # — 6a: Scrape the blog listing page and pull links from it —
         blog_text = page_contents.get("blog", "")
         if blog_text:
-            # Extract article links from blog page
-            links = await page.eval_on_selector_all(
-                "a[href]", "els => els.map(e => ({href: e.href, text: e.innerText}))"
+            # Re-navigate to the blog page so we can read its links
+            blog_url = next(
+                (u for u in section_candidates.get("blog", [])
+                 if is_listing_url(urlparse(u).path)),
+                None
             )
-            article_links = [
-                l for l in links
-                if ARTICLE_PATTERNS.search(l["href"])
-                and urlparse(l["href"]).netloc == domain
-                and len(l["text"].strip()) > 15
-            ][:8]
+            if blog_url:
+                await page.goto(blog_url, wait_until="domcontentloaded", timeout=20000)
+                await asyncio.sleep(0.5)
+                links_on_blog = await get_page_links()
+                for link in links_on_blog:
+                    href = link["href"].split("?")[0].split("#")[0]
+                    text = link["text"].strip()
+                    if not is_same_domain(href):
+                        continue
+                    path = urlparse(href).path
+                    parts = path.strip("/").split("/")
+                    # Must be 2+ path segments with a real slug and meaningful text
+                    if len(parts) >= 2 and len(text) > 12 and len(parts[-1]) > 4:
+                        discovered_articles.append({"href": href, "text": text})
+            print(f"[DNA] Blog listing → {len(discovered_articles)} article links")
 
-            for link in article_links[:5]:
-                print(f"[DNA] Reading article: {link['text'][:60]}")
-                article_titles.append(link["text"].strip())
-                text = await scrape_url(link["href"], "article")
-                if text:
-                    article_texts.append(text[:2000])
+        # — 6b: Sitemap-based article discovery —
+        # Find path segments that appear 3+ times in sitemap (= blog/news sections)
+        if not discovered_articles and sitemap_urls:
+            seg_counts: Counter = Counter()
+            for url in sitemap_urls:
+                p = urlparse(url)
+                if not is_same_domain(url):
+                    continue
+                parts = p.path.strip("/").split("/")
+                if len(parts) >= 2:
+                    seg_counts[parts[0].lower()] += 1
 
-        # ── Portfolio / projects ──────────────────────────────────────────────
+            # Top segments with 3+ entries, excluding known non-content segments
+            content_segments = [
+                seg for seg, cnt in seg_counts.most_common(10)
+                if cnt >= 3 and seg not in SKIP_SEGMENTS
+            ]
+            print(f"[DNA] Sitemap content segments: {content_segments[:6]}")
+
+            for seg in content_segments[:3]:
+                art_urls = [
+                    u for u in sitemap_urls
+                    if is_same_domain(u)
+                    and urlparse(u).path.strip("/").split("/")[0].lower() == seg
+                    and is_article_url(urlparse(u).path)
+                ]
+                if len(art_urls) >= 2:
+                    for url in art_urls[:8]:
+                        slug = urlparse(url).path.strip("/").split("/")[-1]
+                        title = slug.replace("-", " ").replace("_", " ").title()
+                        discovered_articles.append({"href": url, "text": title})
+                    print(f"[DNA] Sitemap segment /{seg}/ → {len(art_urls)} articles")
+                    break
+
+        # — 6c: Auto-detect listing pages from homepage nav —
+        # Any nav segment that has 3+ links to sub-paths is probably a blog/news
+        if not discovered_articles:
+            for seg, links in nav_segments.items():
+                if seg in SKIP_SEGMENTS:
+                    continue
+                sub_links = [
+                    l for l in links
+                    if len(urlparse(l["href"]).path.strip("/").split("/")) >= 2
+                    and len(l["text"].strip()) > 10
+                ]
+                if len(sub_links) >= 3:
+                    print(f"[DNA] Auto-detected listing: /{seg}/ ({len(sub_links)} items)")
+                    for l in sub_links[:8]:
+                        discovered_articles.append({"href": l["href"], "text": l["text"]})
+                    break
+
+        # — 6d: Try every undiscovered nav segment as a potential listing page —
+        if not discovered_articles:
+            unclassified = [
+                seg for seg in nav_segments
+                if seg not in SKIP_SEGMENTS and classify_path(seg) is None
+            ]
+            print(f"[DNA] Trying unclassified segments for articles: {unclassified[:5]}")
+            for seg in unclassified[:6]:
+                listing_url = urljoin(base_url, f"/{seg}")
+                text = await scrape(listing_url, f"listing-{seg}")
+                if len(text) < 150:
+                    continue
+                links_on_page = await get_page_links()
+                sub = [
+                    l for l in links_on_page
+                    if is_same_domain(l["href"])
+                    and len(urlparse(l["href"]).path.strip("/").split("/")) >= 2
+                    and len(l["text"].strip()) > 12
+                ]
+                if len(sub) >= 3:
+                    print(f"[DNA] Found listing: /{seg}/ ({len(sub)} articles)")
+                    for l in sub[:8]:
+                        discovered_articles.append({"href": l["href"], "text": l["text"]})
+                    break
+
+        # ── Step 7: Scrape top 5 articles ────────────────────────────────────
+        # Deduplicate
+        seen_hrefs: set[str] = set()
+        unique_articles: list[dict] = []
+        for art in discovered_articles:
+            href = art["href"].split("?")[0].split("#")[0].rstrip("/")
+            text = art["text"].strip()
+            if href not in seen_hrefs and len(text) > 8 and is_article_url(urlparse(href).path):
+                seen_hrefs.add(href)
+                unique_articles.append({"href": href, "text": text})
+
+        print(f"[DNA] {len(unique_articles)} unique article URLs to read")
+        for link in unique_articles[:5]:
+            print(f"[DNA] Reading article: {link['text'][:65]}")
+            article_titles.append(link["text"].strip())
+            text = await scrape(link["href"], "article")
+            if text:
+                article_texts.append(text[:2000])
+
+        # ── Step 8: Portfolio items ───────────────────────────────────────────
         portfolio_text = page_contents.get("portfolio", "")
         if portfolio_text:
-            # Extract project mentions (simple heuristic)
             lines = [l.strip() for l in portfolio_text.split("\n")
                      if 10 < len(l.strip()) < 150]
             for i, line in enumerate(lines[:20]):
-                if any(w in line.lower() for w in
-                       ["project", "home", "office", "apartment", "villa",
-                        "bedroom", "kitchen", "living", "commercial", "sqft",
-                        "designed", "delivered", "completed", "client"]):
+                if any(w in line.lower() for w in [
+                    "project", "home", "office", "apartment", "villa",
+                    "bedroom", "kitchen", "living", "commercial", "sqft",
+                    "designed", "delivered", "completed", "client",
+                ]):
                     desc = lines[i+1] if i+1 < len(lines) else ""
                     portfolio_items.append({"title": line, "description": desc})
 
@@ -348,20 +636,15 @@ async def extract_company_dna(base_url: str) -> CompanyDNA:
     # ── Build the DNA profile ─────────────────────────────────────────────────
     all_texts = [v for v in page_contents.values() if v]
 
-    # Tone analysis
     dna.tone_adjectives, dna.tone_sample, dna.avg_sentence_length, dna.uses_first_person = \
         infer_tone(all_texts)
 
-    # Keywords
-    dna.top_keywords = extract_keywords_spacy(all_texts, top_n=40)
+    dna.top_keywords = extract_keywords_spacy(all_texts + article_texts, top_n=40)
 
-    # Services — try services page first, then parse sentences from homepage + about
     services_raw = page_contents.get(
         "services",
-        page_contents.get("homepage", "") + " " + page_contents.get("about", "")
+        page_contents.get("homepage", "") + " " + page_contents.get("about", ""),
     )
-
-    # Split by both newlines AND sentences so single-block sites still work
     service_candidates = []
     for chunk in re.split(r"[\n.!]", services_raw):
         chunk = chunk.strip()
@@ -385,23 +668,17 @@ async def extract_company_dna(base_url: str) -> CompanyDNA:
         and not any(u in c.lower() for u in ui_noise)
     ][:10]
 
-    # USPs
     dna.usps = extract_usps(all_texts)
-
-    # About
     dna.about_text = page_contents.get("about", "")[:2000]
 
-    # Tagline (first meaningful line of homepage)
     lines = [l for l in dna.homepage_text.split("\n") if 10 < len(l) < 100]
     dna.tagline = lines[0] if lines else ""
 
-    # Articles
     dna.existing_article_titles = article_titles
     dna.portfolio_items = portfolio_items[:10]
 
-    # Infer audience from about + services text
-    audience_clues = []
     combined = " ".join(all_texts[:3])
+    audience_clues = []
     if re.search(r"homeowner|home owner|residential|families", combined, re.I):
         audience_clues.append("homeowners")
     if re.search(r"corporate|office|commercial|business", combined, re.I):
@@ -410,16 +687,16 @@ async def extract_company_dna(base_url: str) -> CompanyDNA:
         audience_clues.append("startups")
     if re.search(r"luxury|premium|high-end|bespoke", combined, re.I):
         audience_clues.append("premium segment buyers")
-    dna.target_audience = ", ".join(audience_clues) if audience_clues else "professionals and homeowners"
+    dna.target_audience = (
+        ", ".join(audience_clues) if audience_clues else "professionals and homeowners"
+    )
 
-    # Pain points (what their clients worry about)
     pain_patterns = [
         r"(without[^.!?]{10,60}[.!?])",
         r"(no more[^.!?]{5,50}[.!?])",
         r"(never worry[^.!?]{5,50}[.!?])",
         r"(stress[^.!?]{5,50}[.!?])",
         r"(hassle[^.!?]{5,50}[.!?])",
-        r"(time[^.!?]{5,50}overwhelm[^.!?]{5,30}[.!?])",
     ]
     for pattern in pain_patterns:
         matches = re.findall(pattern, combined, re.I)
@@ -429,7 +706,7 @@ async def extract_company_dna(base_url: str) -> CompanyDNA:
         dna.pain_points = [
             "Managing vendors and timelines is overwhelming",
             "Uncertainty about costs spiraling beyond budget",
-            "Getting quality finishes without constant supervision"
+            "Getting quality finishes without constant supervision",
         ]
 
     print(f"\n[DNA] Profile built for: {dna.name}")

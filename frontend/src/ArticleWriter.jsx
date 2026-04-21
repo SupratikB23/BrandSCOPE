@@ -3,9 +3,9 @@ import { SectionHeader, Card, Badge, Btn, Input, Spinner, Divider } from './comp
 import { writeArticle } from './api';
 
 const MODELS = [
-  { id: "gemini-2.0-flash",  label: "Gemini 2.0 Flash",   badge: "Recommended", color: "green",  note: "1,500 req/day free · Fastest" },
-  { id: "gemini-1.5-flash",  label: "Gemini 1.5 Flash",   badge: "Free Tier",   color: "blue",   note: "Very similar quality" },
-  { id: "gemini-1.5-pro",    label: "Gemini 1.5 Pro",     badge: "Best Quality",color: "purple", note: "Lower free quota" },
+  { id: "gemini-2.0-flash",               label: "Gemini 2.0 Flash",         badge: "Recommended",  color: "green",  note: "1,500 req/day free · Fastest" },
+  { id: "gemini-2.0-flash-lite",          label: "Gemini 2.0 Flash Lite",    badge: "Fallback",     color: "blue",   note: "Separate quota · Use if Flash exhausted" },
+  { id: "gemini-2.5-flash-preview-04-17", label: "Gemini 2.5 Flash Preview", badge: "Best Quality", color: "purple", note: "Most capable · Lower free quota" },
 ];
 
 function renderMd(md) {

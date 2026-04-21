@@ -395,7 +395,43 @@ OUTPUT ONLY THE ARTICLE. Start with # [Title].
 
 # ── Gemini writer (Engine 4) ──────────────────────────────────────────────────
 
-GEMINI_MODEL = "gemini-2.0-flash"   # Free tier: 1,500 req/day, 15 RPM
+GEMINI_MODEL = "gemini-2.0-flash"
+
+# Fallback chain tried in order when a model's quota is exhausted or not found
+GEMINI_FALLBACK_CHAIN = [
+    "gemini-2.0-flash",
+    "gemini-2.0-flash-lite",
+    "gemini-2.5-flash-preview-04-17",
+]
+
+
+def _parse_gemini_error(err_str: str) -> tuple[str, int]:
+    """
+    Returns (error_type, retry_after_seconds).
+    error_type: "rate_limit" | "quota_exhausted" | "not_found" | "other"
+    """
+    if "429" in err_str or "RESOURCE_EXHAUSTED" in err_str:
+        # Per-day quota exhausted → switching models will help
+        if "PerDay" in err_str or "PerDayPer" in err_str:
+            return "quota_exhausted", 0
+        # Per-minute rate limit → waiting will help
+        delay_match = re.search(r"retryDelay[\"':,\s]+(\d+)s", err_str)
+        delay = int(delay_match.group(1)) if delay_match else 65
+        return "rate_limit", delay
+    if "404" in err_str or "NOT_FOUND" in err_str:
+        return "not_found", 0
+    return "other", 0
+
+
+async def _call_model(client, model: str, prompt: str, config) -> str:
+    """Single attempt to generate content. Raises on error."""
+    response = await asyncio.to_thread(
+        client.models.generate_content,
+        model=model,
+        contents=prompt,
+        config=config,
+    )
+    return response.text.strip()
 
 
 async def write_article(
@@ -407,7 +443,8 @@ async def write_article(
 ) -> Optional[GeneratedArticle]:
     """
     Call Google Gemini (free tier) to generate the article.
-    Falls back to placeholder content if no API key is provided.
+    Retries on per-minute rate limits and auto-falls back to the next model
+    in the chain when a model's daily quota is exhausted or the model is not found.
     """
     prompt = build_master_prompt(brief, dna, trend)
 
@@ -418,27 +455,46 @@ async def write_article(
 
     if not key:
         print("[writer] No API key found — using placeholder content.")
-        print("[writer] Set GOOGLE_API_KEY env var or pass --api-key to use Gemini.")
         content = _placeholder_article(brief, dna, trend)
     else:
-        try:
-            client = genai.Client(api_key=key)
+        # Build the model queue: requested model first, then rest of fallback chain
+        queue = [model] + [m for m in GEMINI_FALLBACK_CHAIN if m != model]
+        content = None
 
-            # Run synchronous Gemini call in thread to keep async pipeline clean
-            response = await asyncio.to_thread(
-                client.models.generate_content,
-                model=model,
-                contents=prompt,
-                config=genai_types.GenerateContentConfig(
-                    temperature=0.75,       # Creative but controlled (AI_RULES Rule 10)
-                    top_p=0.9,
-                    max_output_tokens=2500, # ~1,300–1,500 words
-                ),
-            )
-            content = response.text.strip()
+        client = genai.Client(api_key=key)
+        config = genai_types.GenerateContentConfig(
+            temperature=0.75,
+            top_p=0.9,
+            max_output_tokens=2500,
+        )
 
-        except Exception as e:
-            print(f"[writer] Gemini error: {e}")
+        for attempt_model in queue:
+            per_minute_retries = 2
+            for retry in range(per_minute_retries + 1):
+                try:
+                    print(f"[writer] Trying model: {attempt_model}" +
+                          (f" (retry {retry})" if retry else ""))
+                    content = await _call_model(client, attempt_model, prompt, config)
+                    print(f"[writer] Success with {attempt_model}")
+                    break  # success — exit retry loop
+                except Exception as e:
+                    err_str = str(e)
+                    error_type, retry_after = _parse_gemini_error(err_str)
+                    print(f"[writer] {attempt_model} error ({error_type}): {str(e)[:120]}")
+
+                    if error_type == "rate_limit" and retry < per_minute_retries:
+                        print(f"[writer] Per-minute limit — waiting {retry_after}s then retrying...")
+                        await asyncio.sleep(retry_after)
+                        continue  # retry same model
+
+                    # quota_exhausted / not_found / other / retries used up → next model
+                    break
+
+            if content:
+                break  # got content, skip remaining fallback models
+
+        if not content:
+            print("[writer] All models exhausted — no content generated.")
             return None
 
     if not content:
