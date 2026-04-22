@@ -111,7 +111,7 @@ export default function BrandDNAPage({ dna, onDNAReady, initialUrl }) {
             <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
               <div>
                 <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 5 }}>
-                  <h2 style={{ margin: 0, fontSize: 19, fontWeight: 700, color: "var(--text)", letterSpacing: "-0.02em" }}>{d.name}</h2>
+                  <h2 className="gradient-text" style={{ margin: 0, fontSize: 20, fontWeight: 800, letterSpacing: "-0.03em", fontFamily: "var(--font-display)" }}>{d.name}</h2>
                   <Badge color="green">DNA Saved</Badge>
                 </div>
                 <p style={{ margin: "0 0 6px", fontSize: 13, color: "var(--accent)", fontStyle: "italic" }}>{d.tagline}</p>
@@ -127,8 +127,8 @@ export default function BrandDNAPage({ dna, onDNAReady, initialUrl }) {
                 { label: "Portfolio items", value: d.portfolio_items?.length || 0 },
               ].map((stat, i) => (
                 <div key={i} style={{ textAlign: "center", padding: "8px 0", borderRight: i < 3 ? "1px solid var(--border)" : "none" }}>
-                  <div style={{ fontSize: 26, fontWeight: 800, color: "var(--accent)", fontFamily: "var(--font-mono)", lineHeight: 1 }}>{stat.value}</div>
-                  <div style={{ fontSize: 11, color: "var(--text-3)", marginTop: 4 }}>{stat.label}</div>
+                  <div className="gradient-text" style={{ fontSize: 30, fontWeight: 800, fontFamily: "var(--font-display)", lineHeight: 1 }}>{stat.value}</div>
+                  <div style={{ fontSize: 10, color: "var(--text-3)", marginTop: 4, fontFamily: "var(--font-mono)", letterSpacing: "0.04em" }}>{stat.label}</div>
                 </div>
               ))}
             </div>

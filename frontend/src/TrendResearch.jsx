@@ -111,12 +111,16 @@ export default function TrendResearchPage({ dna, trends, onTrendsReady }) {
               </div>
               <ProgressBar value={progress} />
               <div style={{
-                marginTop: 13, background: "var(--surface-3)", borderRadius: 8,
-                padding: "11px 14px", maxHeight: 170, overflow: "hidden",
-                fontFamily: "var(--font-mono)", fontSize: 12, lineHeight: 1.7,
+                marginTop: 13,
+                background: "rgba(0,0,0,0.5)",
+                borderRadius: 8,
+                border: "1px solid var(--border)",
+                padding: "12px 16px",
+                maxHeight: 170, overflow: "hidden",
+                fontFamily: "var(--font-mono)", fontSize: 11, lineHeight: 1.85,
               }}>
                 {log.map((l, i) => (
-                  <div key={i} style={{ color: logColor[l.t] || "var(--text-2)" }}>{l.msg}</div>
+                  <div key={i} style={{ color: logColor[l.t] || "var(--text-2)", animation: "fadeIn 0.3s ease both" }}>{l.msg}</div>
                 ))}
               </div>
             </Card>
@@ -158,7 +162,7 @@ export default function TrendResearchPage({ dna, trends, onTrendsReady }) {
                         display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
                       }}>
                         <span style={{
-                          fontSize: 14, fontWeight: 800, fontFamily: "var(--font-mono)",
+                          fontSize: 15, fontWeight: 800, fontFamily: "var(--font-display)",
                           color: t.relevance_score > 0.8 ? "var(--green)" : t.relevance_score > 0.7 ? "var(--accent)" : "var(--amber)",
                           lineHeight: 1,
                         }}>{Math.round(t.relevance_score * 100)}</span>

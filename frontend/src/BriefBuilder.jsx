@@ -173,7 +173,7 @@ export default function BriefBuilderPage({ dna, trends, brief, onBriefReady }) {
               <Badge color="green">Brief Ready</Badge>
               <Badge color={ARTICLE_TYPES[b.article_type]?.color || "gray"}>{ARTICLE_TYPES[b.article_type]?.label}</Badge>
             </div>
-            <h3 style={{ margin: "0 0 7px", fontSize: 16, fontWeight: 700, color: "var(--text)", lineHeight: 1.35, letterSpacing: "-0.01em" }}>{b.title}</h3>
+            <h3 className="gradient-text" style={{ margin: "0 0 7px", fontSize: 17, fontWeight: 800, lineHeight: 1.3, letterSpacing: "-0.02em", fontFamily: "var(--font-display)" }}>{b.title}</h3>
             <p style={{ margin: "0 0 14px", fontSize: 12, color: "var(--accent)", fontFamily: "var(--font-mono)" }}>Trend hook: {b.trend_hook?.slice(0, 80)}…</p>
             <Divider style={{ margin: "12px 0" }} />
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginBottom: 14 }}>

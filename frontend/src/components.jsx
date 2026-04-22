@@ -45,10 +45,12 @@ export function Card({ children, style, onClick, hover, glass }) {
         background: glass ? "var(--glass-bg)" : "var(--surface)",
         border: `1px solid ${hov ? "var(--border-hover)" : "var(--border)"}`,
         borderRadius: 12, padding: 20,
-        transition: "border-color 0.18s, box-shadow 0.18s, transform 0.18s",
+        transition: "border-color 0.2s, box-shadow 0.2s, transform 0.2s",
         cursor: onClick ? "pointer" : "default",
         boxShadow: hov ? "var(--shadow-hover)" : "var(--shadow)",
-        transform: hov && onClick ? "translateY(-1px)" : "none",
+        transform: hov && onClick ? "translateY(-2px)" : "none",
+        backdropFilter: "var(--card-backdrop)",
+        WebkitBackdropFilter: "var(--card-backdrop)",
         ...style,
       }}
     >{children}</div>
@@ -71,8 +73,8 @@ export function ScoreRing({ score, label, variant = "blue", size = 90 }) {
             style={{ transition: "stroke-dasharray 1.2s cubic-bezier(.4,0,.2,1)" }} />
         </svg>
         <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center" }}>
-          <span style={{ fontSize: 21, fontWeight: 800, color: c, lineHeight: 1, fontFamily: "var(--font-mono)" }}>{score}</span>
-          <span style={{ fontSize: 9, color: "var(--text-4)", marginTop: 1 }}>/100</span>
+          <span style={{ fontSize: 22, fontWeight: 800, color: c, lineHeight: 1, fontFamily: "var(--font-display)" }}>{score}</span>
+          <span style={{ fontSize: 8, color: "var(--text-4)", marginTop: 2, fontFamily: "var(--font-mono)", letterSpacing: "0.05em" }}>/100</span>
         </div>
       </div>
       <span style={{ fontSize: 10, fontWeight: 700, color: "var(--text-3)", letterSpacing: "0.1em", textTransform: "uppercase", fontFamily: "var(--font-mono)" }}>{label}</span>
@@ -148,25 +150,35 @@ export function Spinner({ size = 16, color }) {
   return (
     <div style={{
       width: size, height: size,
-      border: `2px solid var(--surface-3)`,
+      border: `1.5px solid var(--surface-3)`,
       borderTopColor: color || "var(--accent)",
-      borderRadius: "50%", animation: "spin 0.7s linear infinite", flexShrink: 0,
+      borderRadius: "50%",
+      animation: "spin 0.65s linear infinite",
+      flexShrink: 0,
     }} />
   );
 }
 
 export function SectionHeader({ step, title, subtitle }) {
   return (
-    <div style={{ marginBottom: 28 }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+    <div className="fade-up" style={{ marginBottom: 32 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
         <span style={{
-          fontSize: 11, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase",
+          fontSize: 10, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase",
           color: "var(--accent)", fontFamily: "var(--font-mono)",
         }}>Engine {step}</span>
-        <div style={{ width: 20, height: 1, background: "var(--border-strong)" }} />
+        <div style={{ width: 28, height: 1, background: "var(--border-strong)", borderRadius: 99 }} />
       </div>
-      <h1 style={{ fontSize: 24, fontWeight: 700, color: "var(--text)", margin: 0, lineHeight: 1.25, letterSpacing: "-0.02em" }}>{title}</h1>
-      {subtitle && <p style={{ fontSize: 14, color: "var(--text-2)", margin: "8px 0 0", lineHeight: 1.65, maxWidth: 580 }}>{subtitle}</p>}
+      <h1 className="gradient-text" style={{
+        fontSize: 28, fontWeight: 800, margin: 0,
+        lineHeight: 1.18, letterSpacing: "-0.03em",
+        fontFamily: "var(--font-display)",
+      }}>{title}</h1>
+      {subtitle && <p style={{
+        fontSize: 14, color: "var(--text-2)",
+        margin: "10px 0 0", lineHeight: 1.7,
+        maxWidth: 600, fontFamily: "var(--font-ui)",
+      }}>{subtitle}</p>}
     </div>
   );
 }

@@ -156,7 +156,7 @@ export default function ArticleWriterPage({ dna, brief, trend, onArticleReady })
                   transition: "all 0.13s",
                 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: model === m.id ? "var(--text)" : "var(--text-2)" }}>{m.label}</span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: model === m.id ? "var(--text)" : "var(--text-2)", fontFamily: "var(--font-display)", letterSpacing: "-0.01em" }}>{m.label}</span>
                     <Badge color={m.color} size="xs">{m.badge}</Badge>
                   </div>
                   <span style={{ fontSize: 10, color: "var(--text-4)" }}>{m.note}</span>
@@ -257,8 +257,9 @@ export default function ArticleWriterPage({ dna, brief, trend, onArticleReady })
             )}
             {stream && viewMode === "raw" && (
               <pre style={{
-                fontFamily: "var(--font-mono)", fontSize: 12, color: "var(--text-2)",
-                whiteSpace: "pre-wrap", lineHeight: 1.7, margin: 0,
+                fontFamily: "var(--font-mono)", fontSize: 11.5, color: "var(--text-2)",
+                whiteSpace: "pre-wrap", lineHeight: 1.85, margin: 0,
+                letterSpacing: "0.01em",
               }}>{stream}</pre>
             )}
           </div>

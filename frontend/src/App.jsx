@@ -73,8 +73,11 @@ function ThemeToggle({ dark, setDark }) {
 function Sidebar({ active, setActive, completed, dark, setDark, clientName, onBackToClients }) {
   return (
     <aside style={{
-      width: 216, flexShrink: 0, background: "var(--surface)",
+      width: 220, flexShrink: 0,
+      background: "var(--sidebar-bg)",
       borderRight: "1px solid var(--border)",
+      backdropFilter: "var(--card-backdrop)",
+      WebkitBackdropFilter: "var(--card-backdrop)",
       display: "flex", flexDirection: "column", height: "100vh",
       position: "sticky", top: 0,
     }}>
@@ -82,10 +85,17 @@ function Sidebar({ active, setActive, completed, dark, setDark, clientName, onBa
       <div style={{ padding: "14px 16px", borderBottom: "1px solid var(--border)" }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: clientName ? 8 : 0 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 9 }}>
-            <div style={{ width: 28, height: 28, borderRadius: 7, background: "var(--accent)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 800, color: "#fff" }}>S</div>
+            <div style={{
+              width: 30, height: 30, borderRadius: 8,
+              background: "var(--accent)",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 14, fontWeight: 800, color: "#fff",
+              fontFamily: "var(--font-display)",
+              boxShadow: "0 0 14px var(--accent-glow)",
+            }}>S</div>
             <div>
-              <div style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", letterSpacing: "-0.02em", lineHeight: 1.1 }}>SearchOS</div>
-              <div style={{ fontSize: 10, color: "var(--text-4)", fontFamily: "var(--font-mono)" }}>v1.0 · Free</div>
+              <div style={{ fontSize: 13, fontWeight: 800, color: "var(--text)", letterSpacing: "-0.03em", lineHeight: 1.1, fontFamily: "var(--font-display)" }}>SearchOS</div>
+              <div style={{ fontSize: 9, color: "var(--text-4)", fontFamily: "var(--font-mono)", letterSpacing: "0.06em" }}>v1.0 · FREE</div>
             </div>
           </div>
           <ThemeToggle dark={dark} setDark={setDark} />
@@ -127,10 +137,10 @@ function Sidebar({ active, setActive, completed, dark, setDark, clientName, onBa
                 {isDone && !isActive ? <span style={{ fontSize: 11 }}>✓</span> : item.icon}
               </div>
               <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 10, fontWeight: 700, color: isActive ? "var(--accent)" : "var(--text-4)", letterSpacing: "0.1em", fontFamily: "var(--font-mono)" }}>
-                  ENGINE {item.engine}
+                <div style={{ fontSize: 9, fontWeight: 700, color: isActive ? "var(--accent)" : "var(--text-4)", letterSpacing: "0.12em", fontFamily: "var(--font-mono)", textTransform: "uppercase" }}>
+                  Engine {item.engine}
                 </div>
-                <div style={{ fontSize: 12, fontWeight: 600, color: isActive ? "var(--text)" : "var(--text-2)", marginTop: 1 }}>{item.label}</div>
+                <div style={{ fontSize: 12, fontWeight: 700, color: isActive ? "var(--text)" : "var(--text-2)", marginTop: 2, fontFamily: "var(--font-display)", letterSpacing: "-0.01em" }}>{item.label}</div>
               </div>
             </button>
           );
@@ -174,12 +184,16 @@ function TopBar({ page, dark, setDark }) {
     <header style={{
       height: 50, borderBottom: "1px solid var(--border)",
       display: "flex", alignItems: "center", justifyContent: "space-between",
-      padding: "0 24px", background: "var(--surface)", flexShrink: 0,
+      padding: "0 24px",
+      background: "var(--sidebar-bg)",
+      backdropFilter: "var(--card-backdrop)",
+      WebkitBackdropFilter: "var(--card-backdrop)",
+      flexShrink: 0,
     }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
         {meta && <>
-          <span style={{ fontSize: 13, color: "var(--text)", fontWeight: 600 }}>{meta.label}</span>
-          <span style={{ fontSize: 12, color: "var(--text-4)" }}>— {meta.desc}</span>
+          <span style={{ fontSize: 14, color: "var(--text)", fontWeight: 800, fontFamily: "var(--font-display)", letterSpacing: "-0.02em" }}>{meta.label}</span>
+          <span style={{ fontSize: 11, color: "var(--text-4)", fontFamily: "var(--font-mono)" }}>— {meta.desc}</span>
         </>}
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -327,7 +341,7 @@ export default function App() {
 
   // screen === "app"
   return (
-    <div style={{ display: "flex", height: "100vh", background: "var(--bg)", overflow: "hidden" }}>
+    <div style={{ display: "flex", height: "100vh", overflow: "hidden" }}>
       <Sidebar
         active={page}
         setActive={gotoPage}

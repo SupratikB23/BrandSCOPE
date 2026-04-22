@@ -29,28 +29,33 @@ function ClientCard({ client, onOpen, onDelete }) {
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
-        background:   "var(--surface)",
-        border:       `1px solid ${hovered ? "var(--border-hover)" : "var(--border)"}`,
-        borderRadius: 14,
-        padding:      "18px 20px",
-        cursor:       "pointer",
-        transition:   "all 0.15s",
-        boxShadow:    hovered ? "var(--shadow-hover)" : "var(--shadow)",
-        transform:    hovered ? "translateY(-2px)" : "none",
-        display:      "flex",
-        flexDirection:"column",
-        gap:          10,
-        position:     "relative",
+        background:        "var(--surface)",
+        border:            `1px solid ${hovered ? "var(--border-hover)" : "var(--border)"}`,
+        borderRadius:      14,
+        padding:           "18px 20px",
+        cursor:            "pointer",
+        transition:        "all 0.22s cubic-bezier(0.22,1,0.36,1)",
+        boxShadow:         hovered ? "var(--shadow-hover)" : "var(--shadow)",
+        transform:         hovered ? "translateY(-3px)" : "none",
+        backdropFilter:    "var(--card-backdrop)",
+        WebkitBackdropFilter: "var(--card-backdrop)",
+        display:           "flex",
+        flexDirection:     "column",
+        gap:               10,
+        position:          "relative",
+        animation:         "fadeUp 0.5s cubic-bezier(0.22,1,0.36,1) both",
       }}
     >
       {/* Header row */}
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
         <div style={{
-          width: 42, height: 42, borderRadius: 11,
+          width: 44, height: 44, borderRadius: 12,
           background: "var(--accent-subtle)",
           border: "1px solid var(--accent-border)",
           display: "flex", alignItems: "center", justifyContent: "center",
           fontSize: 20, fontWeight: 800, color: "var(--accent)", flexShrink: 0,
+          fontFamily: "var(--font-display)",
+          boxShadow: "0 0 16px var(--accent-glow-bg)",
         }}>
           {initial}
         </div>
@@ -71,7 +76,7 @@ function ClientCard({ client, onOpen, onDelete }) {
 
       {/* Name + domain */}
       <div>
-        <h3 style={{ margin: "0 0 2px", fontSize: 15, fontWeight: 700, color: "var(--text)", letterSpacing: "-0.01em", lineHeight: 1.3 }}>
+        <h3 style={{ margin: "0 0 2px", fontSize: 15, fontWeight: 800, color: "var(--text)", letterSpacing: "-0.02em", lineHeight: 1.3, fontFamily: "var(--font-display)" }}>
           {client.name || client.domain}
         </h3>
         <p style={{ margin: 0, fontSize: 11, color: "var(--text-4)", fontFamily: "var(--font-mono)" }}>
@@ -209,8 +214,10 @@ export default function ClientsPage({ onSelectClient, onNewClient, dark, setDark
       {/* ── Top bar ── */}
       <header style={{
         height: 52, flexShrink: 0,
-        background: "var(--surface)",
+        background: "var(--sidebar-bg)",
         borderBottom: "1px solid var(--border)",
+        backdropFilter: "var(--card-backdrop)",
+        WebkitBackdropFilter: "var(--card-backdrop)",
         display: "flex", alignItems: "center", justifyContent: "space-between",
         padding: "0 28px",
       }}>
@@ -220,10 +227,12 @@ export default function ClientsPage({ onSelectClient, onNewClient, dark, setDark
             background: "var(--accent)", display: "flex",
             alignItems: "center", justifyContent: "center",
             fontSize: 14, fontWeight: 800, color: "#fff",
+            fontFamily: "var(--font-display)",
+            boxShadow: "0 0 12px var(--accent-glow)",
           }}>S</div>
-          <span style={{ fontSize: 14, fontWeight: 700, color: "var(--text)", letterSpacing: "-0.02em" }}>SearchOS</span>
+          <span style={{ fontSize: 14, fontWeight: 800, color: "var(--text)", letterSpacing: "-0.03em", fontFamily: "var(--font-display)" }}>SearchOS</span>
           <span style={{ color: "var(--border-strong)", fontSize: 15, margin: "0 2px" }}>/</span>
-          <span style={{ fontSize: 13, color: "var(--text-3)" }}>Brands</span>
+          <span style={{ fontSize: 12, color: "var(--text-3)", fontFamily: "var(--font-mono)" }}>brands</span>
         </div>
         <button
           onClick={() => setDark(d => !d)}
@@ -245,7 +254,7 @@ export default function ClientsPage({ onSelectClient, onNewClient, dark, setDark
         {/* Page header */}
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 28 }}>
           <div>
-            <h1 style={{ fontSize: 22, fontWeight: 700, color: "var(--text)", margin: "0 0 5px", letterSpacing: "-0.02em" }}>
+            <h1 className="gradient-text fade-up" style={{ fontSize: 26, fontWeight: 800, margin: "0 0 5px", letterSpacing: "-0.03em", fontFamily: "var(--font-display)" }}>
               Your Brands
             </h1>
             <p style={{ fontSize: 13, color: "var(--text-3)", margin: 0 }}>
