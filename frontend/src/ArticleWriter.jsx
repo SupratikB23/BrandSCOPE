@@ -6,6 +6,7 @@ const MODELS = [
   { id: "gemini-2.0-flash",               label: "Gemini 2.0 Flash",         badge: "Recommended",  color: "green",  note: "1,500 req/day free · Fastest" },
   { id: "gemini-2.0-flash-lite",          label: "Gemini 2.0 Flash Lite",    badge: "Fallback",     color: "blue",   note: "Separate quota · Use if Flash exhausted" },
   { id: "gemini-2.5-flash-preview-04-17", label: "Gemini 2.5 Flash Preview", badge: "Best Quality", color: "purple", note: "Most capable · Lower free quota" },
+  { id: "groq/llama-3.3-70b-versatile",  label: "Groq · Llama 3.3 70B",    badge: "14,400/day",   color: "amber",  note: "Free forever · Add GROQ_API_KEY to .env" },
 ];
 
 function renderMd(md) {

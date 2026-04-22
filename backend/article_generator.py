@@ -28,6 +28,13 @@ from pathlib import Path
 from google import genai
 from google.genai import types as genai_types
 
+try:
+    from groq import Groq as GroqClient
+    GROQ_AVAILABLE = True
+except ImportError:
+    GROQ_AVAILABLE = False
+    print("[warn] groq package not installed. Run: pip install groq")
+
 from company_scraper import CompanyDNA
 from trend_researcher import TrendReport, TrendItem
 
@@ -397,11 +404,13 @@ OUTPUT ONLY THE ARTICLE. Start with # [Title].
 
 GEMINI_MODEL = "gemini-2.0-flash"
 
-# Fallback chain tried in order when a model's quota is exhausted or not found
+# Fallback chain tried in order when a model's quota is exhausted or not found.
+# Prefix "groq/" means use the Groq API instead of Gemini.
 GEMINI_FALLBACK_CHAIN = [
     "gemini-2.0-flash",
     "gemini-2.0-flash-lite",
     "gemini-2.5-flash-preview-04-17",
+    "groq/llama-3.3-70b-versatile",
 ]
 
 
@@ -423,8 +432,8 @@ def _parse_gemini_error(err_str: str) -> tuple[str, int]:
     return "other", 0
 
 
-async def _call_model(client, model: str, prompt: str, config) -> str:
-    """Single attempt to generate content. Raises on error."""
+async def _call_gemini(client, model: str, prompt: str, config) -> str:
+    """Single Gemini attempt. Raises on error."""
     response = await asyncio.to_thread(
         client.models.generate_content,
         model=model,
@@ -432,6 +441,25 @@ async def _call_model(client, model: str, prompt: str, config) -> str:
         config=config,
     )
     return response.text.strip()
+
+
+async def _call_groq(groq_key: str, model: str, prompt: str) -> str:
+    """Single Groq attempt (OpenAI-compatible). Raises on error."""
+    if not GROQ_AVAILABLE:
+        raise RuntimeError("groq package not installed — run: pip install groq")
+    groq_model = model.removeprefix("groq/")
+
+    def _sync_call():
+        gc = GroqClient(api_key=groq_key)
+        resp = gc.chat.completions.create(
+            model=groq_model,
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.75,
+            max_tokens=2500,
+        )
+        return resp.choices[0].message.content.strip()
+
+    return await asyncio.to_thread(_sync_call)
 
 
 async def write_article(
@@ -442,39 +470,63 @@ async def write_article(
     model: str = GEMINI_MODEL,
 ) -> Optional[GeneratedArticle]:
     """
-    Call Google Gemini (free tier) to generate the article.
-    Retries on per-minute rate limits and auto-falls back to the next model
-    in the chain when a model's daily quota is exhausted or the model is not found.
+    Generate the article using Gemini or Groq (free tier).
+    Retries on per-minute rate limits and auto-falls back through the chain
+    when a model's daily quota is exhausted or the model is not found.
+    Groq models (prefixed "groq/") are tried last as the free-forever fallback.
     """
     prompt = build_master_prompt(brief, dna, trend)
 
     print(f"\n[writer] Generating: {brief.title[:65]}")
     print(f"[writer] Model: {model} | Target: {brief.word_count} words")
 
-    key = api_key if api_key is not None else os.environ.get("GOOGLE_API_KEY", "")
+    gemini_key = api_key if api_key is not None else os.environ.get("GOOGLE_API_KEY", "")
+    groq_key   = os.environ.get("GROQ_API_KEY", "")
 
-    if not key:
-        print("[writer] No API key found — using placeholder content.")
-        content = _placeholder_article(brief, dna, trend)
+    # If no Gemini key at all, go straight to Groq (or placeholder)
+    if not gemini_key:
+        if groq_key:
+            print("[writer] No Gemini key — trying Groq directly.")
+            try:
+                content = await _call_groq(groq_key, "groq/llama-3.3-70b-versatile", prompt)
+                print("[writer] Success with Groq (no Gemini key)")
+            except Exception as e:
+                print(f"[writer] Groq failed: {e}")
+                content = _placeholder_article(brief, dna, trend)
+        else:
+            print("[writer] No API key found — using placeholder content.")
+            content = _placeholder_article(brief, dna, trend)
     else:
-        # Build the model queue: requested model first, then rest of fallback chain
+        # Build queue: requested model first, then rest of fallback chain
         queue = [model] + [m for m in GEMINI_FALLBACK_CHAIN if m != model]
         content = None
 
-        client = genai.Client(api_key=key)
-        config = genai_types.GenerateContentConfig(
+        gemini_client = genai.Client(api_key=gemini_key)
+        gemini_config = genai_types.GenerateContentConfig(
             temperature=0.75,
             top_p=0.9,
             max_output_tokens=2500,
         )
 
         for attempt_model in queue:
-            per_minute_retries = 2
+            is_groq = attempt_model.startswith("groq/")
+
+            # Skip Groq models if no Groq key configured
+            if is_groq and not groq_key:
+                print(f"[writer] Skipping {attempt_model} — no GROQ_API_KEY in .env")
+                continue
+
+            per_minute_retries = 2 if not is_groq else 0
             for retry in range(per_minute_retries + 1):
                 try:
                     print(f"[writer] Trying model: {attempt_model}" +
                           (f" (retry {retry})" if retry else ""))
-                    content = await _call_model(client, attempt_model, prompt, config)
+
+                    if is_groq:
+                        content = await _call_groq(groq_key, attempt_model, prompt)
+                    else:
+                        content = await _call_gemini(gemini_client, attempt_model, prompt, gemini_config)
+
                     print(f"[writer] Success with {attempt_model}")
                     break  # success — exit retry loop
                 except Exception as e:
@@ -485,10 +537,9 @@ async def write_article(
                     if error_type == "rate_limit" and retry < per_minute_retries:
                         print(f"[writer] Per-minute limit — waiting {retry_after}s then retrying...")
                         await asyncio.sleep(retry_after)
-                        continue  # retry same model
+                        continue
 
-                    # quota_exhausted / not_found / other / retries used up → next model
-                    break
+                    break  # quota_exhausted / not_found / other → next model
 
             if content:
                 break  # got content, skip remaining fallback models
