@@ -5,8 +5,8 @@ input  { font-family: inherit; }
 
 /* ── Font aliases ───────────────────────────────────────── */
 :root {
-  --font-display: "Syne", sans-serif;
-  --font-ui:      "DM Sans", sans-serif;
+  --font-display: "Cormorant Garant", "Georgia", serif;
+  --font-ui:      "Outfit", sans-serif;
   --font-mono:    "Space Mono", monospace;
 }
 
@@ -343,6 +343,15 @@ body {
   box-shadow: 0 0 0 1px var(--accent-border),
               0 4px 20px var(--accent-glow),
               0 0 40px rgba(124,58,237,0.25);
+}
+
+/* ── Feature card hover — CSS-based to prevent React re-render blinking ── */
+.feature-card {
+  transition: border-color 0.2s ease, box-shadow 0.2s ease !important;
+}
+.feature-card:hover {
+  border-color: var(--border-hover) !important;
+  box-shadow: var(--shadow-hover) !important;
 }
 
 /* ── Article body styles ─────────────────────────────────── */
