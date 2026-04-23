@@ -345,6 +345,25 @@ body {
               0 0 40px rgba(124,58,237,0.25);
 }
 
+/* ── Bauhaus gradient border (brand cards) — mouse-tracking glow ── */
+:root, [data-theme="dark"] {
+  --bauhaus-bg: rgba(8, 7, 12, 0.90);
+}
+[data-theme="light"] {
+  --bauhaus-bg: rgba(255, 255, 255, 0.96);
+}
+
+.bauhaus-brand-card {
+  --rotation: 4.2rad;
+  --bauhaus-accent: var(--accent);
+  border: 2px solid transparent;
+  background-image:
+    linear-gradient(var(--bauhaus-bg), var(--bauhaus-bg)),
+    linear-gradient(calc(var(--rotation)), var(--bauhaus-accent) 0%, transparent 55%);
+  background-origin: border-box;
+  background-clip: padding-box, border-box;
+}
+
 /* ── Feature card hover — CSS-based to prevent React re-render blinking ── */
 .feature-card {
   transition: border-color 0.2s ease, box-shadow 0.2s ease !important;

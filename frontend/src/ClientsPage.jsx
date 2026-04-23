@@ -1,16 +1,59 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Badge, Btn, Input, Spinner } from './components';
 import { getClients, createClient, deleteClient } from './api';
 
+// Accent colours — one per card, cycles through the palette
+const ACCENT_PALETTE = [
+  "#8B5CF6", // violet
+  "#22D3EE", // cyan
+  "#F59E0B", // amber
+  "#34D399", // emerald
+  "#F472B6", // pink
+  "#60A5FA", // blue
+  "#A78BFA", // lavender
+  "#2DD4BF", // teal
+];
+
 // ── Client card ───────────────────────────────────────────────────────────────
 
-function ClientCard({ client, onOpen, onDelete }) {
+function ClientCard({ client, onOpen, onDelete, accentColor }) {
   const [confirmDel, setConfirmDel] = useState(false);
   const [deleting,   setDeleting]   = useState(false);
   const [hovered,    setHovered]    = useState(false);
+  const cardRef = useRef(null);
 
   const initial     = (client.name || client.domain || "?")[0].toUpperCase();
   const lastUpdated = new Date(client.updated_at).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+
+  // Bauhaus mouse-tracking gradient border
+  useEffect(() => {
+    const card = cardRef.current;
+    if (!card) return;
+
+    const onMove = (e) => {
+      const r = card.getBoundingClientRect();
+      const x = e.clientX - r.left - r.width / 2;
+      const y = e.clientY - r.top - r.height / 2;
+      card.style.setProperty("--rotation", Math.atan2(-x, y) + "rad");
+    };
+    const onEnter = () => {
+      setHovered(true);
+      card.style.transform = "translateY(-3px)";
+    };
+    const onLeave = () => {
+      setHovered(false);
+      card.style.transform = "";
+    };
+
+    card.addEventListener("mousemove", onMove);
+    card.addEventListener("mouseenter", onEnter);
+    card.addEventListener("mouseleave", onLeave);
+    return () => {
+      card.removeEventListener("mousemove", onMove);
+      card.removeEventListener("mouseenter", onEnter);
+      card.removeEventListener("mouseleave", onLeave);
+    };
+  }, []);
 
   async function handleDelete(e) {
     e.stopPropagation();
@@ -25,24 +68,25 @@ function ClientCard({ client, onOpen, onDelete }) {
 
   return (
     <div
+      ref={cardRef}
+      className="bauhaus-brand-card"
       onClick={() => onOpen(client)}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
       style={{
-        background:        "var(--surface)",
-        border:            `1px solid ${hovered ? "var(--border-hover)" : "var(--border)"}`,
+        "--bauhaus-accent": accentColor,
         borderRadius:      14,
         padding:           "18px 20px",
         cursor:            "pointer",
-        transition:        "all 0.22s cubic-bezier(0.22,1,0.36,1)",
-        boxShadow:         hovered ? "var(--shadow-hover)" : "var(--shadow)",
-        transform:         hovered ? "translateY(-3px)" : "none",
+        transition:        "box-shadow 0.22s cubic-bezier(0.22,1,0.36,1), transform 0.22s cubic-bezier(0.22,1,0.36,1)",
+        boxShadow:         hovered
+          ? `0 10px 36px rgba(0,0,0,0.7), 0 0 28px ${accentColor}44`
+          : "1px 6px 18px rgba(0,0,0,0.45)",
         backdropFilter:    "var(--card-backdrop)",
         WebkitBackdropFilter: "var(--card-backdrop)",
         display:           "flex",
         flexDirection:     "column",
         gap:               10,
         position:          "relative",
+        overflow:          "hidden",
         animation:         "fadeUp 0.5s cubic-bezier(0.22,1,0.36,1) both",
       }}
     >
@@ -50,12 +94,12 @@ function ClientCard({ client, onOpen, onDelete }) {
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
         <div style={{
           width: 44, height: 44, borderRadius: 12,
-          background: "var(--accent-subtle)",
-          border: "1px solid var(--accent-border)",
+          background: `${accentColor}18`,
+          border: `1px solid ${accentColor}44`,
           display: "flex", alignItems: "center", justifyContent: "center",
-          fontSize: 20, fontWeight: 800, color: "var(--accent)", flexShrink: 0,
+          fontSize: 20, fontWeight: 700, color: accentColor, flexShrink: 0,
           fontFamily: "var(--font-display)",
-          boxShadow: "0 0 16px var(--accent-glow-bg)",
+          boxShadow: `0 0 14px ${accentColor}22`,
         }}>
           {initial}
         </div>
@@ -303,12 +347,13 @@ export default function ClientsPage({ onSelectClient, onNewClient, dark, setDark
             gridTemplateColumns: "repeat(auto-fill, minmax(270px, 1fr))",
             gap: 14,
           }}>
-            {clients.map(c => (
+            {clients.map((c, i) => (
               <ClientCard
                 key={c.id}
                 client={c}
                 onOpen={onSelectClient}
                 onDelete={handleDelete}
+                accentColor={ACCENT_PALETTE[i % ACCENT_PALETTE.length]}
               />
             ))}
           </div>
