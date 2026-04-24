@@ -844,22 +844,78 @@ async def extract_company_dna(base_url: str) -> CompanyDNA:
             service_candidates.append(chunk)
 
     service_keywords = [
-        "design", "install", "deliver", "service", "solution", "interior",
-        "furnish", "renovate", "build", "construct", "consult", "manage",
-        "develop", "create", "provide", "modular", "kitchen", "bedroom",
-        "living", "wardrobe", "ceiling", "flooring", "lighting", "residential",
-        "commercial", "hospitality", "turnkey", "execution", "workmanship",
-        "craftsmanship", "approach", "innovation", "creativity", "excellence",
-        "spaces", "aesthet", "functional", "luxury", "bespoke",
+        # General
+        "design", "install", "deliver", "service", "solution", "consult",
+        "manage", "develop", "create", "provide", "strategy", "growth",
+        "optimization", "audit", "training", "support", "analytics",
+        # Interior / construction
+        "interior", "furnish", "renovate", "build", "construct", "modular",
+        "kitchen", "bedroom", "living", "wardrobe", "ceiling", "flooring",
+        "lighting", "residential", "commercial", "hospitality", "turnkey",
+        "execution", "workmanship", "craftsmanship", "spaces", "aesthet",
+        "functional", "luxury", "bespoke",
+        # Digital marketing
+        "seo", "ppc", "google ads", "meta ads", "facebook ads", "social media",
+        "content marketing", "email marketing", "lead generation", "conversion",
+        "performance marketing", "branding", "web development", "paid ads",
+        "advertising", "funnel", "campaign", "digital marketing", "sem",
+        "search engine", "copywriting", "influencer", "automation",
+        # Tech / SaaS
+        "software", "saas", "platform", "api", "cloud", "app development",
+        "machine learning", "data", "devops", "security", "integration",
+        # Healthcare
+        "health", "medical", "clinic", "telemedicine", "wellness",
+        # Ecommerce
+        "ecommerce", "shopify", "marketplace", "fulfillment",
+        # Real estate
+        "real estate", "property", "rental", "leasing",
     ]
     ui_noise = ["view more", "click", "skip", "instagram", "facebook",
-                "youtube", "linkedin", "whatsapp", "pinterest", "explore"]
+                "youtube", "linkedin", "whatsapp", "pinterest", "explore",
+                "connect on linkedin", "book a free", "view all", "view case",
+                "meet the", "our vision"]
+    # Phrases that are section headers / taglines, not actual service descriptions
+    noise_phrases = [
+        "our services", "we don't sell", "what we do", "how we work",
+        "why choose us", "our approach", "our process", "get started",
+        "learn more", "read more", "see all", "view all",
+    ]
     dna.services = [
         c for c in service_candidates
         if any(w in c.lower() for w in service_keywords)
         and not any(u in c.lower() for u in ui_noise)
+        and not any(n in c.lower() for n in noise_phrases)
         and not _is_lorem_ipsum(c)
+        and len(c.split()) >= 3  # Must be at least 3 words (not just a heading)
     ][:10]
+
+    # If no services found via keyword matching, try extracting from structured
+    # patterns on the homepage (e.g., "Performance Marketing", "SEO & Content")
+    if not dna.services:
+        # Look for short capitalized phrases that look like service names
+        homepage_lines = [l.strip() for l in (page_contents.get("homepage", "") + " " + page_contents.get("services", "")).split("\n")]
+        for line in homepage_lines:
+            line = line.strip()
+            # Service-like: 2-8 words, not all lowercase nav junk
+            words = line.split()
+            if 2 <= len(words) <= 8 and len(line) < 80 and len(line) > 8:
+                lower = line.lower()
+                if any(w in lower for w in service_keywords):
+                    if not any(n in lower for n in noise_phrases):
+                        if not any(u in lower for u in ui_noise):
+                            if not _is_lorem_ipsum(line):
+                                dna.services.append(line)
+            if len(dna.services) >= 10:
+                break
+        # Deduplicate
+        seen = set()
+        unique_services = []
+        for s in dna.services:
+            key = s.lower().strip()
+            if key not in seen:
+                seen.add(key)
+                unique_services.append(s)
+        dna.services = unique_services[:10]
 
     dna.usps = extract_usps(all_texts)
     dna.about_text = page_contents.get("about", "")[:2000]
