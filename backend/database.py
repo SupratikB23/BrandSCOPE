@@ -377,6 +377,29 @@ async def save_article(client_id: int, brief_id: int | None, article: dict) -> i
     art_dir = CLIENTS_DIR / client_slug / "04_articles"
     art_dir.mkdir(parents=True, exist_ok=True)
     if article.get("content"):
-        (art_dir / f"{art_slug}.md").write_text(article["content"], encoding="utf-8")
+        frontmatter = (
+            f"---\n"
+            f"title: {article.get('seo_title', '')}\n"
+            f"description: {article.get('meta_description', '')}\n"
+            f"keyword: {article.get('primary_keyword', '')}\n"
+            f"word_count: {article.get('word_count', 0)}\n"
+            f"quality_passed: {bool(article.get('quality_passed'))}\n"
+            f"created_at: {now}\n"
+            f"---\n\n"
+        )
+        (art_dir / f"{art_slug}.md").write_text(
+            frontmatter + article["content"], encoding="utf-8"
+        )
 
     return record_id
+
+
+async def get_article(client_id: int, article_id: int) -> dict | None:
+    """Fetch a single article row including full content."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        row = await (await db.execute(
+            "SELECT * FROM generated_articles WHERE id = ? AND client_id = ?",
+            (article_id, client_id),
+        )).fetchone()
+        return dict(row) if row else None

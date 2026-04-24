@@ -32,6 +32,7 @@ from article_generator import (
     quality_check, has_banned_phrases, compute_seo_aeo_geo_scores,
 )
 import database as db
+from database import get_article
 
 
 app = FastAPI(title="SearchOS API")
@@ -257,5 +258,18 @@ async def api_save_article(client_id: int, req: SaveArticleRequest):
     try:
         record_id = await db.save_article(client_id, req.brief_id, req.article)
         return {"ok": True, "id": record_id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/clients/{client_id}/articles/{article_id}")
+async def api_get_article(client_id: int, article_id: int):
+    try:
+        article = await get_article(client_id, article_id)
+        if not article:
+            raise HTTPException(status_code=404, detail="Article not found")
+        return article
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

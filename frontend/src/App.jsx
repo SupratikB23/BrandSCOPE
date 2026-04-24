@@ -310,7 +310,25 @@ export default function App() {
   function handleArticleReady(a) {
     setArticle(a);
     if (client?.id) {
-      silentSave(saveClientArticle(client.id, a, briefDbId));
+      silentSave(
+        saveClientArticle(client.id, a, briefDbId).then(res => {
+          if (res?.id) {
+            const newEntry = {
+              id:            res.id,
+              title:         a.seo_title || a.title || "",
+              article_slug:  a.slug || "",
+              word_count:    a.word_count || 0,
+              seo_title:     a.seo_title || "",
+              quality_passed: a.quality_passed ? 1 : 0,
+              created_at:    new Date().toISOString(),
+            };
+            setClient(prev => ({
+              ...prev,
+              articles: [newEntry, ...(prev?.articles || [])],
+            }));
+          }
+        })
+      );
     }
   }
 
@@ -382,6 +400,7 @@ export default function App() {
                 dna={dna}
                 brief={brief}
                 trend={selectedTrend}
+                client={client}
                 onArticleReady={handleArticleReady}
               />
             )}

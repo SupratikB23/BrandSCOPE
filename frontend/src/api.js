@@ -68,3 +68,6 @@ export const saveClientBrief = (clientId, brief) =>
 
 export const saveClientArticle = (clientId, article, briefId = null) =>
   post(`/api/clients/${clientId}/save-article`, { article, brief_id: briefId });
+
+export const getClientArticle = (clientId, articleId) =>
+  get(`/api/clients/${clientId}/articles/${articleId}`);

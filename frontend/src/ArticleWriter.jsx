@@ -1,6 +1,6 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { SectionHeader, Card, Badge, Btn, Input, Spinner, Divider } from './components';
-import { writeArticle } from './api';
+import { writeArticle, getClientArticle } from './api';
 
 const MODELS = [
   { id: "gemini-2.0-flash",               label: "Gemini 2.0 Flash",         badge: "Recommended",  color: "green",  note: "1,500 req/day free · Fastest" },
@@ -31,7 +31,134 @@ function renderMd(md) {
   return out.join('\n');
 }
 
-export default function ArticleWriterPage({ dna, brief, trend, onArticleReady }) {
+// ── Score configuration ────────────────────────────────────────────────────────
+const SCORE_CONFIG = [
+  {
+    key:   "seo",
+    label: "SEO Score",
+    desc:  "Google ranking",
+    color: "#22d3ee",          // neon cyan
+    glow:  "rgba(34,211,238,0.18)",
+    border:"rgba(34,211,238,0.35)",
+    bg:    "rgba(34,211,238,0.06)",
+  },
+  {
+    key:   "aeo",
+    label: "AEO Score",
+    desc:  "Answer engines",
+    color: "#a78bfa",          // neon violet
+    glow:  "rgba(167,139,250,0.18)",
+    border:"rgba(167,139,250,0.35)",
+    bg:    "rgba(167,139,250,0.06)",
+  },
+  {
+    key:   "geo",
+    label: "GEO Score",
+    desc:  "AI citation",
+    color: "#34d399",          // neon emerald
+    glow:  "rgba(52,211,153,0.18)",
+    border:"rgba(52,211,153,0.35)",
+    bg:    "rgba(52,211,153,0.06)",
+  },
+];
+
+function ScoreRing({ score, color, glow }) {
+  const r   = 28;
+  const circ = 2 * Math.PI * r;
+  const dash = (score / 100) * circ;
+  return (
+    <svg width={72} height={72} viewBox="0 0 72 72" style={{ flexShrink: 0 }}>
+      {/* track */}
+      <circle cx={36} cy={36} r={r} fill="none" stroke="var(--surface-3)" strokeWidth={5} />
+      {/* progress */}
+      <circle
+        cx={36} cy={36} r={r} fill="none"
+        stroke={color} strokeWidth={5}
+        strokeDasharray={`${dash} ${circ}`}
+        strokeLinecap="round"
+        transform="rotate(-90 36 36)"
+        style={{ filter: `drop-shadow(0 0 5px ${glow})`, transition: "stroke-dasharray 1s cubic-bezier(.4,0,.2,1)" }}
+      />
+      {/* number */}
+      <text
+        x={36} y={40}
+        textAnchor="middle"
+        fill={color}
+        fontSize={15}
+        fontWeight={800}
+        fontFamily="var(--font-display)"
+        style={{ letterSpacing: "-0.03em" }}
+      >{score}</text>
+    </svg>
+  );
+}
+
+function ScoreBoxes({ scores }) {
+  if (!scores) return null;
+  return (
+    <div style={{
+      display: "grid",
+      gridTemplateColumns: "1fr 1fr 1fr",
+      gap: 14,
+      marginBottom: 18,
+    }}>
+      {SCORE_CONFIG.map(cfg => {
+        const score = scores[cfg.key] ?? 0;
+        const grade = score >= 80 ? "Excellent" : score >= 60 ? "Good" : score >= 40 ? "Fair" : "Needs work";
+        return (
+          <div key={cfg.key} style={{
+            borderRadius: 14,
+            border: `1px solid ${cfg.border}`,
+            background: cfg.bg,
+            boxShadow: `0 0 24px ${cfg.glow}`,
+            padding: "18px 20px",
+            display: "flex",
+            alignItems: "center",
+            gap: 16,
+            position: "relative",
+            overflow: "hidden",
+          }}>
+            {/* subtle top accent line */}
+            <div style={{
+              position: "absolute", top: 0, left: 0, right: 0, height: 2,
+              background: `linear-gradient(90deg, transparent, ${cfg.color}, transparent)`,
+            }} />
+            <ScoreRing score={score} color={cfg.color} glow={cfg.glow} />
+            <div>
+              <div style={{
+                fontSize: 9,
+                fontWeight: 700,
+                letterSpacing: "0.14em",
+                textTransform: "uppercase",
+                color: cfg.color,
+                fontFamily: "var(--font-mono)",
+                marginBottom: 4,
+                opacity: 0.9,
+              }}>{cfg.label}</div>
+              <div style={{
+                fontSize: 22,
+                fontWeight: 900,
+                color: cfg.color,
+                fontFamily: "var(--font-display)",
+                letterSpacing: "-0.03em",
+                lineHeight: 1,
+                marginBottom: 4,
+                textShadow: `0 0 16px ${cfg.glow}`,
+              }}>{score}<span style={{ fontSize: 12, fontWeight: 500, opacity: 0.6 }}>/100</span></div>
+              <div style={{
+                fontSize: 11,
+                color: "var(--text-3)",
+                fontFamily: "var(--font-ui)",
+              }}>{grade} · {cfg.desc}</div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+export default function ArticleWriterPage({ dna, brief, trend, client, onArticleReady }) {
   const [model, setModel]       = useState("gemini-2.0-flash");
   const [apiKey, setApiKey]     = useState("");
   const [generating, setGen]    = useState(false);
@@ -42,8 +169,23 @@ export default function ArticleWriterPage({ dna, brief, trend, onArticleReady })
   const [viewMode, setViewMode] = useState("preview");
   const [error, setError]       = useState(null);
   const [checks, setChecks]     = useState([]);
+  const [scores, setScores]     = useState(null);   // { seo, aeo, geo }
+
+  // Previous articles
+  const [prevArticles, setPrevArticles]   = useState([]);
+  const [selectedPrev, setSelectedPrev]   = useState(null);  // full article row
+  const [loadingPrev,  setLoadingPrev]    = useState(false);
+  const [prevViewMode, setPrevViewMode]   = useState("preview");
+
   const timerRef = useRef(null);
   const outRef   = useRef(null);
+
+  // Sync previous articles list from client prop
+  useEffect(() => {
+    if (client?.articles) {
+      setPrevArticles(client.articles);
+    }
+  }, [client?.id, client?.articles?.length]);
 
   const activeBrief = brief || {};
   const activeDNA   = dna   || {};
@@ -72,9 +214,25 @@ export default function ArticleWriterPage({ dna, brief, trend, onArticleReady })
     }, 16);
   }
 
+  async function viewPreviousArticle(artMeta) {
+    if (selectedPrev?.id === artMeta.id) { setSelectedPrev(null); return; }
+    if (!client?.id) return;
+    setLoadingPrev(true);
+    try {
+      const full = await getClientArticle(client.id, artMeta.id);
+      setSelectedPrev(full);
+      setPrevViewMode("preview");
+    } catch (e) {
+      console.error("Failed to load article:", e);
+    } finally {
+      setLoadingPrev(false);
+    }
+  }
+
   async function generate() {
     if (!brief || !dna) return;
-    setGen(true); setStream(""); setDone(false); setArticle(null); setError(null); setChecks([]);
+    setSelectedPrev(null);
+    setGen(true); setStream(""); setDone(false); setArticle(null); setError(null); setChecks([]); setScores(null);
 
     // Build the trend object for the API
     const trendData = trend || { title: brief.trend_hook || "", summary: "", source: "", url: "" };
@@ -89,6 +247,9 @@ export default function ArticleWriterPage({ dna, brief, trend, onArticleReady })
       });
 
       if (result.quality_checks) setChecks(result.quality_checks);
+      if (result.seo_score !== undefined) {
+        setScores({ seo: result.seo_score, aeo: result.aeo_score, geo: result.geo_score });
+      }
       if (result.seo_title) {
         setArticle({
           content: result.content,
@@ -106,9 +267,11 @@ export default function ArticleWriterPage({ dna, brief, trend, onArticleReady })
   }
 
   function copyContent(type) {
+    const content = selectedPrev ? selectedPrev.content_md : (article?.content || stream || "");
+    const title   = selectedPrev ? selectedPrev.seo_title  : (article?.seo_title || "");
     const text = type === "md"
-      ? (article?.content || stream || "")
-      : `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>${article?.seo_title || ""}</title></head><body>${renderMd(article?.content || stream)}</body></html>`;
+      ? content
+      : `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>${title}</title></head><body>${renderMd(content)}</body></html>`;
     navigator.clipboard.writeText(text).then(() => { setCopied(type); setTimeout(() => setCopied(null), 2000); });
   }
 
@@ -129,6 +292,8 @@ export default function ArticleWriterPage({ dna, brief, trend, onArticleReady })
           </p>
         </Card>
       )}
+
+      <ScoreBoxes scores={scores} />
 
       <div style={{ display: "grid", gridTemplateColumns: "300px 1fr", gap: 16, alignItems: "start" }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
@@ -209,30 +374,105 @@ export default function ArticleWriterPage({ dna, brief, trend, onArticleReady })
               </Badge>
             </Card>
           )}
+
+          {/* ── Previous Articles ── */}
+          {prevArticles.length > 0 && (
+            <Card style={{ padding: 16 }}>
+              <p style={{ margin: "0 0 10px", fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-3)", fontFamily: "var(--font-mono)" }}>
+                Previous Articles
+                <Badge color="gray" size="xs" style={{ marginLeft: 7 }}>{prevArticles.length}</Badge>
+              </p>
+              <div style={{ display: "flex", flexDirection: "column", gap: 5, maxHeight: 260, overflowY: "auto" }}>
+                {prevArticles.map(art => {
+                  const isActive = selectedPrev?.id === art.id;
+                  const date = new Date(art.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+                  return (
+                    <button
+                      key={art.id}
+                      onClick={() => viewPreviousArticle(art)}
+                      style={{
+                        background: isActive ? "var(--accent-subtle)" : "var(--surface-2)",
+                        border: `1px solid ${isActive ? "var(--accent-border)" : "var(--border)"}`,
+                        borderRadius: 7, padding: "8px 10px", cursor: "pointer",
+                        textAlign: "left", transition: "all 0.13s",
+                        display: "flex", flexDirection: "column", gap: 3,
+                      }}
+                    >
+                      <span style={{ fontSize: 11, fontWeight: 600, color: isActive ? "var(--text)" : "var(--text-2)", lineHeight: 1.35, display: "block" }}>
+                        {(art.seo_title || art.title || "Untitled").slice(0, 52)}
+                        {(art.seo_title || art.title || "").length > 52 ? "…" : ""}
+                      </span>
+                      <div style={{ display: "flex", gap: 5, alignItems: "center" }}>
+                        <span style={{ fontSize: 9, color: "var(--text-4)", fontFamily: "var(--font-mono)" }}>{date}</span>
+                        {art.word_count > 0 && <span style={{ fontSize: 9, color: "var(--text-4)", fontFamily: "var(--font-mono)" }}>· {art.word_count}w</span>}
+                        <Badge color={art.quality_passed ? "green" : "amber"} size="xs">{art.quality_passed ? "✓" : "~"}</Badge>
+                        {loadingPrev && isActive && <Spinner size={9} />}
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+              {selectedPrev && (
+                <button onClick={() => setSelectedPrev(null)} style={{
+                  marginTop: 8, width: "100%", background: "none",
+                  border: "1px solid var(--border)", borderRadius: 6,
+                  padding: "5px 0", fontSize: 10, color: "var(--text-3)",
+                  cursor: "pointer", fontFamily: "var(--font-ui)",
+                }}>
+                  ← Back to Generator
+                </button>
+              )}
+            </Card>
+          )}
         </div>
 
         <Card style={{ padding: 0, overflow: "hidden", display: "flex", flexDirection: "column" }}>
+          {/* ── Toolbar ── */}
           <div style={{
             padding: "11px 16px", borderBottom: "1px solid var(--border)",
             display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10,
           }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+              {/* View mode toggle */}
               <div style={{ display: "flex", background: "var(--surface-2)", borderRadius: 7, padding: 3, gap: 2 }}>
-                {[["preview","Preview"],["raw","Markdown"]].map(([id,lbl]) => (
-                  <button key={id} onClick={() => setViewMode(id)} style={{
-                    background: viewMode === id ? "var(--surface)" : "transparent",
-                    border: viewMode === id ? "1px solid var(--border)" : "1px solid transparent",
-                    borderRadius: 5, padding: "3px 10px", fontSize: 11, fontWeight: 600,
-                    cursor: "pointer", color: viewMode === id ? "var(--text)" : "var(--text-3)",
-                    transition: "all 0.12s", fontFamily: "var(--font-ui)",
-                  }}>{lbl}</button>
-                ))}
+                {[["preview","Preview"],["raw","Markdown"]].map(([id,lbl]) => {
+                  const active = selectedPrev ? prevViewMode === id : viewMode === id;
+                  return (
+                    <button key={id} onClick={() => selectedPrev ? setPrevViewMode(id) : setViewMode(id)} style={{
+                      background: active ? "var(--surface)" : "transparent",
+                      border: active ? "1px solid var(--border)" : "1px solid transparent",
+                      borderRadius: 5, padding: "3px 10px", fontSize: 11, fontWeight: 600,
+                      cursor: "pointer", color: active ? "var(--text)" : "var(--text-3)",
+                      transition: "all 0.12s", fontFamily: "var(--font-ui)",
+                    }}>{lbl}</button>
+                  );
+                })}
               </div>
-              {wc > 0 && <span style={{ fontSize: 11, color: wcColor, fontFamily: "var(--font-mono)" }}>{wc.toLocaleString()} words</span>}
-              {generating && !done && <Spinner size={12} />}
-              {done && <Badge color="green" size="xs">Complete</Badge>}
+
+              {/* Label / word count */}
+              {selectedPrev ? (
+                <>
+                  <Badge color="blue" size="xs">Saved Article</Badge>
+                  {selectedPrev.word_count > 0 && (
+                    <span style={{ fontSize: 11, color: "var(--text-3)", fontFamily: "var(--font-mono)" }}>
+                      {selectedPrev.word_count.toLocaleString()} words
+                    </span>
+                  )}
+                  <Badge color={selectedPrev.quality_passed ? "green" : "amber"} size="xs">
+                    {selectedPrev.quality_passed ? "Quality ✓" : "Quality ~"}
+                  </Badge>
+                </>
+              ) : (
+                <>
+                  {wc > 0 && <span style={{ fontSize: 11, color: wcColor, fontFamily: "var(--font-mono)" }}>{wc.toLocaleString()} words</span>}
+                  {generating && !done && <Spinner size={12} />}
+                  {done && <Badge color="green" size="xs">Complete</Badge>}
+                </>
+              )}
             </div>
-            {done && (
+
+            {/* Copy buttons */}
+            {(done || selectedPrev) && (
               <div style={{ display: "flex", gap: 7 }}>
                 <Btn onClick={() => copyContent("md")}   variant="ghost" size="sm">{copied === "md"   ? "✓ Copied" : "Copy .md"}</Btn>
                 <Btn onClick={() => copyContent("html")} variant="ghost" size="sm">{copied === "html" ? "✓ Copied" : "Copy HTML"}</Btn>
@@ -240,8 +480,27 @@ export default function ArticleWriterPage({ dna, brief, trend, onArticleReady })
             )}
           </div>
 
+          {/* ── Content area ── */}
           <div ref={outRef} style={{ flex: 1, overflowY: "auto", minHeight: 520, maxHeight: "68vh", padding: "22px 26px" }}>
-            {!stream && !generating && (
+
+            {/* Viewing a saved previous article */}
+            {selectedPrev && (
+              loadingPrev ? (
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: 400 }}>
+                  <Spinner size={22} />
+                </div>
+              ) : prevViewMode === "preview" ? (
+                <div className="art-body" dangerouslySetInnerHTML={{ __html: renderMd(selectedPrev.content_md || "") }} />
+              ) : (
+                <pre style={{
+                  fontFamily: "var(--font-mono)", fontSize: 11.5, color: "var(--text-2)",
+                  whiteSpace: "pre-wrap", lineHeight: 1.85, margin: 0, letterSpacing: "0.01em",
+                }}>{selectedPrev.content_md || ""}</pre>
+              )
+            )}
+
+            {/* Generator output */}
+            {!selectedPrev && !stream && !generating && (
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: 400, gap: 10 }}>
                 <div style={{ fontSize: 36, opacity: 0.2 }}>✍</div>
                 <p style={{ color: "var(--text-3)", fontSize: 14, margin: 0, textAlign: "center", lineHeight: 1.7 }}>
@@ -250,21 +509,38 @@ export default function ArticleWriterPage({ dna, brief, trend, onArticleReady })
                 <p style={{ color: "var(--text-4)", fontSize: 11, margin: 0, fontFamily: "var(--font-mono)" }}>
                   ~1,300 words · SEO + AEO + GEO signals baked in
                 </p>
+                {prevArticles.length > 0 && (
+                  <p style={{ color: "var(--text-4)", fontSize: 11, margin: 0, fontFamily: "var(--font-mono)" }}>
+                    {prevArticles.length} saved article{prevArticles.length !== 1 ? "s" : ""} — select from the list on the left to review
+                  </p>
+                )}
               </div>
             )}
-            {stream && viewMode === "preview" && (
+            {!selectedPrev && stream && viewMode === "preview" && (
               <div className="art-body" dangerouslySetInnerHTML={{ __html: renderMd(stream) }} />
             )}
-            {stream && viewMode === "raw" && (
+            {!selectedPrev && stream && viewMode === "raw" && (
               <pre style={{
                 fontFamily: "var(--font-mono)", fontSize: 11.5, color: "var(--text-2)",
-                whiteSpace: "pre-wrap", lineHeight: 1.85, margin: 0,
-                letterSpacing: "0.01em",
+                whiteSpace: "pre-wrap", lineHeight: 1.85, margin: 0, letterSpacing: "0.01em",
               }}>{stream}</pre>
             )}
           </div>
 
-          {done && article && (
+          {/* ── Footer meta ── */}
+          {selectedPrev && selectedPrev.seo_title && (
+            <div style={{ padding: "11px 18px", borderTop: "1px solid var(--border)", display: "flex", gap: 20, flexWrap: "wrap" }}>
+              <div style={{ flex: "0 0 auto" }}>
+                <p style={{ margin: "0 0 3px", fontSize: 9, color: "var(--text-4)", textTransform: "uppercase", letterSpacing: "0.09em", fontFamily: "var(--font-mono)" }}>SEO Title</p>
+                <p style={{ margin: 0, fontSize: 12, color: "var(--text-2)" }}>{selectedPrev.seo_title}</p>
+              </div>
+              <div style={{ flex: 1 }}>
+                <p style={{ margin: "0 0 3px", fontSize: 9, color: "var(--text-4)", textTransform: "uppercase", letterSpacing: "0.09em", fontFamily: "var(--font-mono)" }}>Meta Description</p>
+                <p style={{ margin: 0, fontSize: 12, color: "var(--text-2)" }}>{selectedPrev.meta_description}</p>
+              </div>
+            </div>
+          )}
+          {!selectedPrev && done && article && (
             <div style={{ padding: "11px 18px", borderTop: "1px solid var(--border)", display: "flex", gap: 20, flexWrap: "wrap" }}>
               <div style={{ flex: "0 0 auto" }}>
                 <p style={{ margin: "0 0 3px", fontSize: 9, color: "var(--text-4)", textTransform: "uppercase", letterSpacing: "0.09em", fontFamily: "var(--font-mono)" }}>SEO Title</p>
