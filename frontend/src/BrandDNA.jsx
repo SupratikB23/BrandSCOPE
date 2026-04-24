@@ -110,11 +110,13 @@ export default function BrandDNAPage({ dna, onDNAReady, initialUrl }) {
           <Card>
             <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
               <div>
-                <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 5 }}>
-                  <h2 className="gradient-text" style={{ margin: 0, fontSize: 20, fontWeight: 800, letterSpacing: "-0.03em", fontFamily: "var(--font-display)" }}>{d.name}</h2>
+                <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 4 }}>
+                  <h2 className="gradient-text" style={{ margin: 0, fontSize: 26, fontWeight: 900, letterSpacing: "-0.03em", fontFamily: "var(--font-display)", lineHeight: 1.2 }}>{d.name}</h2>
                   <Badge color="green">DNA Saved</Badge>
                 </div>
-                <p style={{ margin: "0 0 6px", fontSize: 13, color: "var(--accent)", fontStyle: "italic" }}>{d.tagline}</p>
+                {d.tagline && (
+                  <p style={{ margin: "6px 0 6px", fontSize: 14, fontWeight: 700, color: "var(--text-2)", letterSpacing: "-0.01em", lineHeight: 1.45 }}>{d.tagline}</p>
+                )}
                 <p style={{ margin: 0, fontSize: 12, color: "var(--text-4)", fontFamily: "var(--font-mono)" }}>{d.domain}</p>
               </div>
             </div>

@@ -482,6 +482,11 @@ async def extract_company_dna(base_url: str) -> CompanyDNA:
                 resp = await page.goto(url, wait_until="domcontentloaded", timeout=20000)
                 if not resp or resp.status >= 400:
                     return ""
+                # Scroll down to trigger lazy-loaded / carousel content
+                await page.evaluate("window.scrollTo(0, document.body.scrollHeight / 2)")
+                await asyncio.sleep(0.5)
+                await page.evaluate("window.scrollTo(0, document.body.scrollHeight)")
+                await asyncio.sleep(0.5)
                 text = await page.evaluate("""() => {
                     ['nav','footer','header','script','style','noscript',
                      '.cookie','#cookie','[class*="cookie"]','[id*="cookie"]',
@@ -564,6 +569,20 @@ async def extract_company_dna(base_url: str) -> CompanyDNA:
         except Exception:
             dna.name = domain.replace("www.", "").split(".")[0].title()
 
+        # Grab meta description / OG description for tagline fallback
+        try:
+            meta_desc = await page.evaluate("""() => {
+                const og = document.querySelector('meta[property="og:description"]');
+                if (og && og.content.trim()) return og.content.trim();
+                const meta = document.querySelector('meta[name="description"]');
+                if (meta && meta.content.trim()) return meta.content.trim();
+                return '';
+            }""")
+            if meta_desc:
+                dna.description = meta_desc[:300]
+        except Exception:
+            pass
+
         # ── Step 3: Discover all internal links from homepage ────────────────
         all_home_links = await get_page_links()
 
@@ -638,10 +657,39 @@ async def extract_company_dna(base_url: str) -> CompanyDNA:
 
         discovered_articles: list[dict] = []
 
-        # — 6a: Scrape the blog listing page and pull links from it —
+        # — 6a: Scrape blog AND portfolio listing pages and pull links —
+        # Many sites put articles/case-studies under portfolio or case-study sections
+        article_listing_sections = ["blog", "portfolio"]
+        for _als in article_listing_sections:
+            listing_text = page_contents.get(_als, "")
+            if not listing_text:
+                continue
+            listing_url = next(
+                (u for u in section_candidates.get(_als, [])
+                 if is_listing_url(urlparse(u).path)),
+                None
+            )
+            if listing_url:
+                await page.goto(listing_url, wait_until="domcontentloaded", timeout=20000)
+                await asyncio.sleep(0.5)
+                links_on_listing = await get_page_links()
+                for link in links_on_listing:
+                    href = link["href"].split("?")[0].split("#")[0]
+                    text = link["text"].strip()
+                    if not is_same_domain(href):
+                        continue
+                    path = urlparse(href).path
+                    parts = path.strip("/").split("/")
+                    if (len(parts) >= 1 and len(text) > 5
+                        and len(parts[-1]) > 3
+                        and parts[-1] not in {"#", ""}
+                        and not _is_lorem_ipsum(text)):
+                        discovered_articles.append({"href": href, "text": text})
+                print(f"[DNA] {_als.title()} listing → {len(discovered_articles)} article links so far")
+
+        # Legacy blog-only path (kept for sites where blog_text exists but loop above handled it)
         blog_text = page_contents.get("blog", "")
-        if blog_text:
-            # Re-navigate to the blog page so we can read its links
+        if blog_text and not discovered_articles:
             blog_url = next(
                 (u for u in section_candidates.get("blog", [])
                  if is_listing_url(urlparse(u).path)),
@@ -658,8 +706,11 @@ async def extract_company_dna(base_url: str) -> CompanyDNA:
                         continue
                     path = urlparse(href).path
                     parts = path.strip("/").split("/")
-                    # Must be 2+ path segments with a real slug and meaningful text
-                    if len(parts) >= 2 and len(text) > 12 and len(parts[-1]) > 4:
+                    # Accept links with 1+ path segments, meaningful text, real slug
+                    if (len(parts) >= 1 and len(text) > 5
+                        and len(parts[-1]) > 3
+                        and parts[-1] not in {"#", ""}
+                        and not _is_lorem_ipsum(text)):
                         discovered_articles.append({"href": href, "text": text})
             print(f"[DNA] Blog listing → {len(discovered_articles)} article links")
 
