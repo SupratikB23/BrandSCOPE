@@ -543,32 +543,90 @@ async def extract_company_dna(base_url: str) -> CompanyDNA:
                     } catch(e) {}
                 }
 
+                // 2b. Logo alt text — typically contains exact brand name
+                const logoSelectors = [
+                    'header img[alt]', '.logo img[alt]', '#logo img[alt]',
+                    'a[class*="logo"] img[alt]', 'a[href="/"] img[alt]',
+                    'img[class*="logo"][alt]', 'img[id*="logo"][alt]',
+                    'nav img[alt]', '.navbar img[alt]', '.header img[alt]',
+                ];
+                for (const sel of logoSelectors) {
+                    const img = document.querySelector(sel);
+                    if (img && img.alt && img.alt.trim().length > 1
+                        && img.alt.trim().split(/\\s+/).length <= 5
+                        && !img.alt.toLowerCase().includes('logo')
+                        && img.alt.trim().length < 50) {
+                        return img.alt.trim();
+                    }
+                }
+
+                // 2c. Header text — look for the brand name text in the header/nav
+                const headerSelectors = [
+                    'header .logo', 'header .brand', 'header .site-name',
+                    '.navbar-brand', '.site-title', '#site-name',
+                    'header h1', 'header h2', '.logo-text', '.brand-name',
+                ];
+                for (const sel of headerSelectors) {
+                    const el = document.querySelector(sel);
+                    if (el) {
+                        const txt = el.innerText.trim();
+                        if (txt && txt.split(/\\s+/).length <= 5 && txt.length < 60) {
+                            return txt;
+                        }
+                    }
+                }
+
                 // 3. <title> — split on common separators and check each segment
                 const title = document.title || '';
                 // Split on all common separators: | – — - · : » ·
                 const parts = title.split(/[|–—·:»]/).map(s => s.trim()).filter(Boolean);
                 const seoWords = ['best', 'top', 'leading', 'premier', '#1', 'no.1',
                                   'affordable', 'cheap', 'data-driven', 'performance',
-                                  'growth', 'agency', 'expert', 'specialist'];
+                                  'growth', 'agency', 'expert', 'specialist',
+                                  'real leads', 'real sales', 'vanity', 'metrics'];
 
-                // Find the shortest segment that looks like a brand name (1-4 words, no SEO bait)
-                for (const part of parts) {
-                    const words = part.split(/\\s+/);
-                    const lower = part.toLowerCase();
-                    const isSEO = words.length > 4 || seoWords.some(w => lower.includes(w));
-                    if (!isSEO && words.length >= 1 && words.length <= 4) return part;
+                // Helper: if segment looks like "brand.com" or "brand.co.in", clean it
+                function cleanDomainSegment(s) {
+                    // e.g. "medianirvana.com" → "Medianirvana" but we want "Media Nirvana"
+                    // At minimum strip TLD and return title-cased
+                    return s.replace(/\\.(com|co|in|net|io|org|agency|studio|ai)(\\.[a-z]{2})?$/i, '').trim();
                 }
 
-                // If all segments are SEO-ish, try the shortest one
+                // Find the best brand-name segment
+                for (const part of parts) {
+                    let candidate = part;
+                    // If segment looks like a domain (contains a dot near the end), clean it
+                    if (/\\.[a-z]{2,6}(\\.[a-z]{2})?$/i.test(candidate)) {
+                        candidate = cleanDomainSegment(candidate);
+                    }
+                    const words = candidate.split(/\\s+/);
+                    const lower = candidate.toLowerCase();
+                    const isSEO = words.length > 5 || seoWords.some(w => lower.includes(w));
+                    if (!isSEO && words.length >= 1 && words.length <= 5 && candidate.length > 2) {
+                        return candidate;
+                    }
+                }
+
+                // Last resort: use the shortest segment after domain-cleaning
                 if (parts.length > 0) {
-                    const shortest = parts.reduce((a, b) => a.length <= b.length ? a : b);
-                    if (shortest.split(/\\s+/).length <= 4) return shortest;
+                    const cleaned = parts.map(p =>
+                        /\\.[a-z]{2,6}(\\.[a-z]{2})?$/i.test(p) ? cleanDomainSegment(p) : p
+                    );
+                    const shortest = cleaned.reduce((a, b) => a.length <= b.length ? a : b);
+                    if (shortest.length > 2 && shortest.split(/\\s+/).length <= 5) return shortest;
                 }
 
                 return '';
             }""")
             if brand_name:
-                dna.name = brand_name.strip()
+                name = brand_name.strip()
+                # If name still looks like a domain slug (no spaces, lowercase), title-case it
+                if name and " " not in name and name.islower():
+                    name = name.title()
+                # If name is suspiciously long (tagline leaked in), fall back to domain
+                if len(name.split()) > 6 or len(name) > 60:
+                    name = domain.replace("www.", "").split(".")[0].title()
+                dna.name = name
             else:
                 dna.name = domain.replace("www.", "").split(".")[0].title()
         except Exception:
