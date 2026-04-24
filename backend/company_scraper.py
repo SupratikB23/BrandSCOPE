@@ -223,11 +223,49 @@ async def fetch_sitemap(base_url: str, domain: str) -> list[str]:
 
 # ── NLP helpers (unchanged) ───────────────────────────────────────────────────
 
+def _is_lorem_ipsum(text: str) -> bool:
+    """Return True if text looks like Lorem Ipsum / placeholder Latin."""
+    latin_words = {
+        "lorem", "ipsum", "dolor", "sit", "amet", "consectetur", "adipiscing",
+        "elit", "sed", "eiusmod", "tempor", "incididunt", "labore", "dolore",
+        "magna", "aliqua", "enim", "minim", "veniam", "quis", "nostrud",
+        "exercitation", "ullamco", "laboris", "nisi", "aliquip", "commodo",
+        "consequat", "duis", "aute", "irure", "reprehenderit", "voluptate",
+        "velit", "esse", "cillum", "fugiat", "nulla", "pariatur", "excepteur",
+        "sint", "occaecat", "cupidatat", "proident", "sunt", "culpa",
+        "officia", "deserunt", "mollit", "anim", "etiam", "maecenas",
+        "nullam", "donec", "curabitur", "ultricies", "faucibus", "fringilla",
+        "blandit", "semper", "libero", "pellentesque", "habitant", "morbi",
+        "tristique", "senectus", "netus", "malesuada", "fames", "turpis",
+        "egestas", "praesent", "commodo", "cursus", "viverra", "suspendisse",
+        "potenti", "accumsan", "lacus", "vestibulum", "ante", "primis",
+        "orci", "luctus", "posuere", "cubilia", "curae", "proin",
+        "sapien", "venenatis", "lacinia", "feugiat", "vulputate", "tortor",
+        "dignissim", "convallis", "aenean", "pretium", "ligula", "porttitor",
+        "rhoncus", "consequat", "phasellus", "augue", "sollicitudin",
+        "facilisis", "eleifend", "quam", "dui", "leo", "vivamus",
+        "fermentum", "nibh", "neque", "imperdiet", "tincidunt", "condimentum",
+        "tempus", "integer", "bibendum", "arcu", "massa", "nunc",
+        "pulvinar", "mattis", "placerat", "diam", "euismod", "quisque",
+        "rutrum", "dictum", "nam", "eget", "hendrerit", "justo",
+    }
+    words = text.lower().split()
+    if not words:
+        return True
+    latin_count = sum(1 for w in words if w.strip(".,;:!?()") in latin_words)
+    return latin_count / len(words) > 0.4
+
+
 def extract_keywords_spacy(texts: list[str], top_n: int = 30) -> list[str]:
     if not NLP_AVAILABLE or not texts:
         return extract_keywords_simple(texts, top_n)
 
-    combined = " ".join(texts[:10])[:50000]
+    # Filter out Lorem Ipsum / placeholder text before NLP
+    clean_texts = [t for t in texts if not _is_lorem_ipsum(t)]
+    if not clean_texts:
+        clean_texts = texts  # fallback
+
+    combined = " ".join(clean_texts[:10])[:50000]
     doc = nlp(combined)
 
     _det = {"the", "a", "an", "our", "your", "their", "this", "that",
@@ -252,14 +290,49 @@ def extract_keywords_spacy(texts: list[str], top_n: int = 30) -> list[str]:
         "submit", "send", "close", "open", "link", "button",
     }
 
+    # Latin / Lorem Ipsum words to reject from keywords
+    latin_junk = {
+        "lorem", "ipsum", "dolor", "amet", "consectetur", "adipiscing",
+        "elit", "sed", "etiam", "maecenas", "nullam", "donec", "curabitur",
+        "ultricies", "faucibus", "fringilla", "blandit", "semper", "libero",
+        "pellentesque", "habitant", "morbi", "tristique", "senectus",
+        "netus", "malesuada", "fames", "turpis", "egestas", "praesent",
+        "cursus", "viverra", "suspendisse", "potenti", "accumsan", "lacus",
+        "vestibulum", "ante", "primis", "orci", "luctus", "posuere",
+        "cubilia", "curae", "proin", "sapien", "venenatis", "lacinia",
+        "feugiat", "vulputate", "tortor", "dignissim", "convallis",
+        "aenean", "pretium", "ligula", "porttitor", "rhoncus", "phasellus",
+        "augue", "sollicitudin", "facilisis", "eleifend", "quam", "dui",
+        "leo", "vivamus", "fermentum", "nibh", "neque", "imperdiet",
+        "tincidunt", "condimentum", "tempus", "integer", "bibendum",
+        "arcu", "nunc", "pulvinar", "mattis", "placerat", "diam",
+        "euismod", "quisque", "rutrum", "dictum", "nam", "eget",
+        "hendrerit", "justo", "nulla", "quis",
+    }
+
     counts = Counter(phrases + entities)
-    return [term for term, _ in counts.most_common(top_n * 2)
-            if term not in stopwords and len(term) > 3
-            and not term.startswith(("http", "www"))][:top_n]
+    results = []
+    for term, _ in counts.most_common(top_n * 3):
+        if term in stopwords or len(term) <= 3:
+            continue
+        if term.startswith(("http", "www")):
+            continue
+        # Reject if any word in the term is Latin placeholder
+        term_words = set(term.split())
+        if term_words & latin_junk:
+            continue
+        results.append(term)
+        if len(results) >= top_n:
+            break
+    return results
 
 
 def extract_keywords_simple(texts: list[str], top_n: int = 30) -> list[str]:
-    combined = " ".join(texts).lower()
+    # Filter out Lorem Ipsum text
+    clean_texts = [t for t in texts if not _is_lorem_ipsum(t)]
+    if not clean_texts:
+        clean_texts = texts
+    combined = " ".join(clean_texts).lower()
     words = re.findall(r"\b[a-z]{4,}\b", combined)
     stopwords = {
         "this", "that", "with", "from", "have", "been", "will", "they",
@@ -270,7 +343,27 @@ def extract_keywords_simple(texts: list[str], top_n: int = 30) -> list[str]:
         "find", "know", "back", "next", "prev", "menu", "home", "page",
         "contact", "submit", "send", "close", "open", "link",
     }
-    counts = Counter(w for w in words if w not in stopwords)
+    # Latin / Lorem Ipsum words
+    latin_junk = {
+        "lorem", "ipsum", "dolor", "amet", "consectetur", "adipiscing",
+        "elit", "etiam", "maecenas", "nullam", "donec", "curabitur",
+        "ultricies", "faucibus", "fringilla", "blandit", "semper", "libero",
+        "pellentesque", "habitant", "morbi", "tristique", "senectus",
+        "netus", "malesuada", "fames", "turpis", "egestas", "praesent",
+        "cursus", "viverra", "suspendisse", "potenti", "accumsan", "lacus",
+        "vestibulum", "ante", "primis", "luctus", "posuere", "cubilia",
+        "curae", "proin", "sapien", "venenatis", "lacinia", "feugiat",
+        "vulputate", "tortor", "dignissim", "convallis", "aenean",
+        "pretium", "ligula", "porttitor", "rhoncus", "phasellus", "augue",
+        "sollicitudin", "facilisis", "eleifend", "quam", "vivamus",
+        "fermentum", "nibh", "neque", "imperdiet", "tincidunt",
+        "condimentum", "tempus", "integer", "bibendum", "arcu", "nunc",
+        "pulvinar", "mattis", "placerat", "diam", "euismod", "quisque",
+        "rutrum", "dictum", "eget", "hendrerit", "justo", "nulla", "quis",
+        "orci", "duis",
+    }
+    reject = stopwords | latin_junk
+    counts = Counter(w for w in words if w not in reject)
     return [w for w, _ in counts.most_common(top_n)]
 
 
@@ -417,9 +510,51 @@ async def extract_company_dna(base_url: str) -> CompanyDNA:
         dna.homepage_text = homepage_text[:3000]
         page_contents["homepage"] = homepage_text
 
+        # Extract brand name — prefer OG/meta tags, then structured data, then <title>.
+        # Avoid using raw <title> since it often contains SEO phrases like
+        # "Best interior designers in Jubilee Hills".
         try:
-            title = await page.title()
-            dna.name = title.split("|")[0].split("–")[0].split("-")[0].strip()
+            brand_name = await page.evaluate("""() => {
+                // 1. Open Graph site_name (most reliable brand name)
+                const ogSite = document.querySelector('meta[property="og:site_name"]');
+                if (ogSite && ogSite.content.trim()) return ogSite.content.trim();
+
+                // 2. Schema.org Organization name
+                const schemas = document.querySelectorAll('script[type="application/ld+json"]');
+                for (const s of schemas) {
+                    try {
+                        const d = JSON.parse(s.textContent);
+                        const items = Array.isArray(d) ? d : [d];
+                        for (const item of items) {
+                            if ((item['@type'] === 'Organization' || item['@type'] === 'LocalBusiness')
+                                && item.name) return item.name;
+                            if (item.publisher && item.publisher.name) return item.publisher.name;
+                        }
+                    } catch(e) {}
+                }
+
+                // 3. <title> — but only the first segment before separators
+                const title = document.title || '';
+                const seg = title.split(/[|–—\\-·:]/)[0].trim();
+                // Reject if it looks like an SEO phrase (>4 words or contains "best", "top", etc.)
+                const words = seg.split(/\\s+/);
+                const seoWords = ['best', 'top', 'leading', 'premier', '#1', 'no.1', 'affordable', 'cheap'];
+                const isSEO = words.length > 4 || seoWords.some(w => seg.toLowerCase().includes(w));
+                if (!isSEO && seg) return seg;
+
+                // 4. Try the last segment of title (sometimes brand is after separator)
+                const parts = title.split(/[|–—\\-·:]/);
+                if (parts.length > 1) {
+                    const last = parts[parts.length - 1].trim();
+                    if (last && last.split(/\\s+/).length <= 4) return last;
+                }
+
+                return '';
+            }""")
+            if brand_name:
+                dna.name = brand_name
+            else:
+                dna.name = domain.replace("www.", "").split(".")[0].title()
         except Exception:
             dna.name = domain.replace("www.", "").split(".")[0].title()
 
@@ -671,8 +806,21 @@ async def extract_company_dna(base_url: str) -> CompanyDNA:
     dna.usps = extract_usps(all_texts)
     dna.about_text = page_contents.get("about", "")[:2000]
 
-    lines = [l for l in dna.homepage_text.split("\n") if 10 < len(l) < 100]
-    dna.tagline = lines[0] if lines else ""
+    # Tagline: prefer meta description / OG description, then first meaningful homepage line
+    tagline_candidates = []
+    # Try to grab meta/OG descriptions from homepage text (already scraped)
+    # We'll set tagline from the homepage lines but filter out nav junk
+    nav_junk = {"skip", "menu", "home", "contact", "about", "login", "sign", "cookie",
+                "accept", "privacy", "toggle", "close", "search", "navigation"}
+    lines = [l.strip() for l in dna.homepage_text.split("\n") if 10 < len(l.strip()) < 150]
+    for line in lines:
+        words = line.lower().split()
+        if any(w in nav_junk for w in words[:2]):
+            continue
+        if _is_lorem_ipsum(line):
+            continue
+        tagline_candidates.append(line)
+    dna.tagline = tagline_candidates[0] if tagline_candidates else ""
 
     dna.existing_article_titles = article_titles
     dna.portfolio_items = portfolio_items[:10]
