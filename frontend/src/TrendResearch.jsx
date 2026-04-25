@@ -3,7 +3,7 @@ import { SectionHeader, Card, Btn, Spinner, Badge, Tag, ProgressBar } from './co
 import { researchTrends } from './api';
 
 const SRC_COLOR  = { "Google News": "blue", "DuckDuckGo": "purple" };
-const TYPE_COLOR = { news: "blue", trend: "purple", stat: "amber", community: "green" };
+const TYPE_COLOR = { news: "blue", trend: "purple" };
 
 export default function TrendResearchPage({ dna, trends, onTrendsReady }) {
   const [tab, setTab]         = useState("live");
@@ -22,10 +22,10 @@ export default function TrendResearchPage({ dna, trends, onTrendsReady }) {
     // Animate log while API runs
     const logSteps = [
       { t: "info", msg: `[trends] Scanning industry signals for: ${dna.name}` },
-      { t: "req",  msg: "[trends] Google News RSS — querying…" },
-      { t: "req",  msg: "[trends] DuckDuckGo — querying…" },
-      { t: "req",  msg: "[trends] Reddit — scanning subreddits…" },
-      { t: "info", msg: "[trends] Scoring relevance against company keywords…" },
+      { t: "req",  msg: "[trends] Google News RSS — fetching real-time headlines…" },
+      { t: "req",  msg: "[trends] DuckDuckGo — querying web search…" },
+      { t: "info", msg: "[trends] Deduplicating and scoring relevance…" },
+      { t: "info", msg: "[trends] Generating article angles…" },
     ];
     let i = 0;
     const iv = setInterval(() => {
@@ -70,7 +70,7 @@ export default function TrendResearchPage({ dna, trends, onTrendsReady }) {
   return (
     <div>
       <SectionHeader step="02" title="Live Trend Research"
-        subtitle="Pulls real-time signals from Google News RSS, DuckDuckGo web search, and Reddit public API. No API keys. Scores each trend by relevance to your Brand DNA." />
+        subtitle="Pulls real-time signals from Google News RSS and DuckDuckGo web search. No API keys. Scores each trend by relevance to your Brand DNA." />
 
       <div style={{ display: "flex", gap: 0, marginBottom: 22, borderBottom: "1px solid var(--border)" }}>
         {[["live", "Live Trends"], ["scraper", "Article Scraper"]].map(([id, label]) => (
@@ -90,7 +90,7 @@ export default function TrendResearchPage({ dna, trends, onTrendsReady }) {
               <div>
                 <p style={{ margin: "0 0 3px", fontSize: 14, fontWeight: 600, color: "var(--text)" }}>Ready to scan industry trends</p>
                 <p style={{ margin: 0, fontSize: 12, color: "var(--text-3)" }}>
-                  {dna ? `Detected company: ${dna.name} · Sources: Google News, DuckDuckGo, Reddit` : "Complete Brand DNA extraction first"}
+                  {dna ? `Detected company: ${dna.name} · Sources: Google News, DuckDuckGo` : "Complete Brand DNA extraction first"}
                 </p>
               </div>
               <Btn onClick={scan} disabled={!dna}>Scan Now</Btn>
@@ -136,6 +136,9 @@ export default function TrendResearchPage({ dna, trends, onTrendsReady }) {
                   {new Date(result.generated_at).toLocaleTimeString()}
                 </span>
                 <Btn onClick={scan} variant="ghost" size="sm">↻ Rescan</Btn>
+                <Btn onClick={() => onTrendsReady && onTrendsReady(result)} size="sm">
+                  Continue to Brief →
+                </Btn>
               </div>
 
               <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginBottom: 14 }}>
@@ -143,7 +146,7 @@ export default function TrendResearchPage({ dna, trends, onTrendsReady }) {
               </div>
 
               <div style={{ display: "flex", gap: 5, marginBottom: 14 }}>
-                {["all", "news", "trend", "stat", "community"].map(f => (
+                {["all", "news", "trend"].map(f => (
                   <Tag key={f} active={filter === f} onClick={() => setFilter(f)}>{f}</Tag>
                 ))}
               </div>
@@ -201,11 +204,6 @@ export default function TrendResearchPage({ dna, trends, onTrendsReady }) {
                 </Card>
               )}
 
-              <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 20 }}>
-                <Btn onClick={() => onTrendsReady && onTrendsReady(result)} size="md">
-                  Continue to Brief Builder →
-                </Btn>
-              </div>
             </div>
           )}
         </div>

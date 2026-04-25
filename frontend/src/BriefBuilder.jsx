@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { SectionHeader, Card, Badge, Tag, Btn, Divider, ScoreRing, Spinner } from './components';
 import { buildBrief } from './api';
 
@@ -13,25 +13,35 @@ const ARTICLE_TYPES = {
 
 export default function BriefBuilderPage({ dna, trends, brief, onBriefReady }) {
   const [trendIdx, setTrendIdx]   = useState(0);
-  const [angleIdx, setAngleIdx]   = useState(0);
+  const [angleIdx, setAngleIdx]   = useState(null);   // null = nothing selected yet
+  const [customAngle, setCustomAngle] = useState(""); // the editable angle text
   const [aType, setAType]         = useState("educational");
   const [built, setBuilt]         = useState(brief || null);
   const [building, setBuilding]   = useState(false);
   const [error, setError]         = useState(null);
+  const angleInputRef             = useRef(null);
 
   const tList   = trends?.trends || [];
   const aList   = trends?.article_angles || [];
   const covered = dna?.existing_article_titles || [];
   const uncovered = trends?.article_angles || [];
 
+  function selectSuggestion(i, text) {
+    setAngleIdx(i);
+    setCustomAngle(text);
+    // Focus the input so user can immediately refine it
+    setTimeout(() => angleInputRef.current?.focus(), 50);
+  }
+
   async function build() {
-    if (!dna || !tList.length || !aList.length) return;
+    const finalAngle = customAngle.trim() || aList[0] || "Untitled Article";
+    if (!dna || !tList.length) return;
     setBuilding(true); setError(null);
     try {
       const result = await buildBrief({
         dna,
         trend: tList[trendIdx],
-        angle: aList[angleIdx] || "Untitled Article",
+        angle: finalAngle,
         article_type: aType,
       });
       result.seo_score = 82 + Math.floor(Math.random() * 12);
@@ -91,20 +101,70 @@ export default function BriefBuilderPage({ dna, trends, brief, onBriefReady }) {
           </div>
         </Card>
 
-        <Card style={{ padding: 16 }}>
-          <p style={{ margin: "0 0 10px", fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-3)", fontFamily: "var(--font-mono)" }}>Select Angle</p>
-          <div style={{ display: "flex", flexDirection: "column", gap: 5, maxHeight: 290, overflowY: "auto" }}>
-            {aList.map((a, i) => (
-              <div key={i} onClick={() => setAngleIdx(i)} style={{
-                padding: "8px 10px", borderRadius: 7, cursor: "pointer",
-                background: angleIdx === i ? "var(--accent-subtle)" : "var(--surface-2)",
-                border: `1px solid ${angleIdx === i ? "var(--accent-border)" : "transparent"}`,
-                transition: "all 0.13s",
-              }}>
-                <span style={{ fontSize: 12, color: angleIdx === i ? "var(--text)" : "var(--text-2)", lineHeight: 1.4 }}>{a}</span>
-              </div>
-            ))}
+        <Card style={{ padding: 16, display: "flex", flexDirection: "column", gap: 10 }}>
+          <p style={{ margin: 0, fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-3)", fontFamily: "var(--font-mono)" }}>
+            Article Angle
+          </p>
+
+          {/* Editable angle input */}
+          <div style={{ position: "relative" }}>
+            <textarea
+              ref={angleInputRef}
+              value={customAngle}
+              onChange={e => { setCustomAngle(e.target.value); setAngleIdx(null); }}
+              placeholder="Type your own angle, or click a suggestion below…"
+              rows={3}
+              style={{
+                width: "100%", boxSizing: "border-box",
+                background: "var(--input-bg)",
+                border: `1px solid ${customAngle.trim() ? "var(--accent)" : "var(--border-strong)"}`,
+                borderRadius: 8, padding: "9px 11px",
+                fontSize: 13, color: "var(--text)", lineHeight: 1.55,
+                fontFamily: "var(--font-ui)", resize: "vertical",
+                outline: "none",
+                boxShadow: customAngle.trim() ? "0 0 0 3px var(--accent-ring)" : "none",
+                transition: "border-color 0.15s, box-shadow 0.15s",
+              }}
+            />
+            {customAngle.trim() && (
+              <button
+                onClick={() => { setCustomAngle(""); setAngleIdx(null); }}
+                style={{
+                  position: "absolute", top: 7, right: 7,
+                  background: "var(--surface-2)", border: "1px solid var(--border)",
+                  borderRadius: 5, padding: "1px 6px", fontSize: 10,
+                  color: "var(--text-3)", cursor: "pointer",
+                }}
+              >✕ clear</button>
+            )}
           </div>
+
+          {/* AI-generated suggestions */}
+          {aList.length > 0 && (
+            <div>
+              <p style={{ margin: "0 0 6px", fontSize: 10, color: "var(--text-4)", fontFamily: "var(--font-mono)", letterSpacing: "0.06em" }}>
+                SUGGESTIONS — click to use &amp; edit
+              </p>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4, maxHeight: 200, overflowY: "auto" }}>
+                {aList.map((a, i) => (
+                  <div
+                    key={i}
+                    onClick={() => selectSuggestion(i, a)}
+                    style={{
+                      padding: "7px 10px", borderRadius: 7, cursor: "pointer",
+                      background: angleIdx === i ? "var(--accent-subtle)" : "var(--surface-2)",
+                      border: `1px solid ${angleIdx === i ? "var(--accent-border)" : "transparent"}`,
+                      transition: "all 0.13s",
+                      display: "flex", alignItems: "flex-start", gap: 7,
+                    }}
+                  >
+                    <span style={{ fontSize: 9, color: "var(--accent)", fontFamily: "var(--font-mono)", flexShrink: 0, marginTop: 2 }}>#{i + 1}</span>
+                    <span style={{ fontSize: 11, color: angleIdx === i ? "var(--text)" : "var(--text-2)", lineHeight: 1.45 }}>{a}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </Card>
 
         <Card style={{ padding: 16 }}>
@@ -161,7 +221,7 @@ export default function BriefBuilderPage({ dna, trends, brief, onBriefReady }) {
       )}
 
       <div style={{ display: "flex", justifyContent: "center", marginBottom: 24 }}>
-        <Btn onClick={build} size="lg" disabled={building || !tList.length || !aList.length}>
+        <Btn onClick={build} size="lg" disabled={building || !tList.length || !customAngle.trim()}>
           {building ? <><Spinner size={14} /> Building…</> : "Build Article Brief"}
         </Btn>
       </div>
