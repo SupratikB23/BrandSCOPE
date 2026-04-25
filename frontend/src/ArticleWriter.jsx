@@ -180,6 +180,11 @@ export default function ArticleWriterPage({ dna, brief, trend, client, onArticle
   const timerRef = useRef(null);
   const outRef   = useRef(null);
 
+  // Clear interval on unmount to prevent state updates on unmounted component
+  useEffect(() => {
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, []);
+
   // Sync previous articles list from client prop
   useEffect(() => {
     if (client?.articles) {
@@ -250,9 +255,6 @@ export default function ArticleWriterPage({ dna, brief, trend, client, onArticle
       if (result.seo_score !== undefined) {
         setScores({ seo: result.seo_score, aeo: result.aeo_score, geo: result.geo_score });
       }
-      if (result.seo_score !== undefined) {
-        setScores({ seo: result.seo_score, aeo: result.aeo_score, geo: result.geo_score });
-      }
       if (result.seo_title) {
         setArticle({
           content: result.content,
@@ -295,8 +297,6 @@ export default function ArticleWriterPage({ dna, brief, trend, client, onArticle
           </p>
         </Card>
       )}
-
-      <ScoreBoxes scores={scores} />
 
       <ScoreBoxes scores={scores} />
 
@@ -383,10 +383,12 @@ export default function ArticleWriterPage({ dna, brief, trend, client, onArticle
           {/* ── Previous Articles ── */}
           {prevArticles.length > 0 && (
             <Card style={{ padding: 16 }}>
-              <p style={{ margin: "0 0 10px", fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-3)", fontFamily: "var(--font-mono)" }}>
-                Previous Articles
-                <Badge color="gray" size="xs" style={{ marginLeft: 7 }}>{prevArticles.length}</Badge>
-              </p>
+              <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 10 }}>
+                <p style={{ margin: 0, fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-3)", fontFamily: "var(--font-mono)" }}>
+                  Previous Articles
+                </p>
+                <Badge color="gray" size="xs">{prevArticles.length}</Badge>
+              </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 5, maxHeight: 260, overflowY: "auto" }}>
                 {prevArticles.map(art => {
                   const isActive = selectedPrev?.id === art.id;
@@ -488,13 +490,16 @@ export default function ArticleWriterPage({ dna, brief, trend, client, onArticle
           {/* ── Content area ── */}
           <div ref={outRef} style={{ flex: 1, overflowY: "auto", minHeight: 520, maxHeight: "68vh", padding: "22px 26px" }}>
 
+            {/* Loading a previous article */}
+            {loadingPrev && (
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: 400 }}>
+                <Spinner size={22} />
+              </div>
+            )}
+
             {/* Viewing a saved previous article */}
-            {selectedPrev && (
-              loadingPrev ? (
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", minHeight: 400 }}>
-                  <Spinner size={22} />
-                </div>
-              ) : prevViewMode === "preview" ? (
+            {!loadingPrev && selectedPrev && (
+              prevViewMode === "preview" ? (
                 <div className="art-body" dangerouslySetInnerHTML={{ __html: renderMd(selectedPrev.content_md || "") }} />
               ) : (
                 <pre style={{
@@ -505,7 +510,7 @@ export default function ArticleWriterPage({ dna, brief, trend, client, onArticle
             )}
 
             {/* Generator output */}
-            {!selectedPrev && !stream && !generating && (
+            {!loadingPrev && !selectedPrev && !stream && !generating && (
               <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", minHeight: 400, gap: 10 }}>
                 <div style={{ fontSize: 36, opacity: 0.2 }}>✍</div>
                 <p style={{ color: "var(--text-3)", fontSize: 14, margin: 0, textAlign: "center", lineHeight: 1.7 }}>
@@ -521,10 +526,10 @@ export default function ArticleWriterPage({ dna, brief, trend, client, onArticle
                 )}
               </div>
             )}
-            {!selectedPrev && stream && viewMode === "preview" && (
+            {!loadingPrev && !selectedPrev && stream && viewMode === "preview" && (
               <div className="art-body" dangerouslySetInnerHTML={{ __html: renderMd(stream) }} />
             )}
-            {!selectedPrev && stream && viewMode === "raw" && (
+            {!loadingPrev && !selectedPrev && stream && viewMode === "raw" && (
               <pre style={{
                 fontFamily: "var(--font-mono)", fontSize: 11.5, color: "var(--text-2)",
                 whiteSpace: "pre-wrap", lineHeight: 1.85, margin: 0, letterSpacing: "0.01em",
