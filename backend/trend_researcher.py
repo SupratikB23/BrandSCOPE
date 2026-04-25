@@ -1,7 +1,7 @@
 """
 Engine 2 — Live Trend Researcher
 Finds what's happening RIGHT NOW in any industry.
-Uses only free tools: DuckDuckGo search + Google News RSS + Reddit.
+Uses only free tools: DuckDuckGo search + Google News RSS.
 No API keys. No cost. Fresh data every run.
 """
 
@@ -39,7 +39,7 @@ class TrendItem:
     url: str
     published: Optional[str] = None
     relevance_score: float = 0.0   # How relevant to the company (0–1)
-    trend_type: str = "news"        # "news" | "update" | "trend" | "stat"
+    trend_type: str = "news"        # "news" | "trend"
 
 
 @dataclass
@@ -123,14 +123,47 @@ INDUSTRY_SEARCH_TERMS = {
     ],
 }
 
-# Default for unknown industries
+# Default for unknown industries (used only if dynamic builder also fails)
 DEFAULT_SEARCH_TERMS = [
     "{industry} trends 2025",
     "{industry} latest news",
-    "{industry} new developments",
     "{industry} industry update 2025",
-    "best practices {industry} 2025",
 ]
+
+
+def build_dynamic_queries(services: list[str], keywords: list[str]) -> list[str]:
+    """
+    Build targeted search queries directly from the company's own service
+    descriptions and keywords.  Used for any industry not in the preset map —
+    handles plumbers, electricians, lawyers, florists, or anything else.
+    """
+    queries = []
+
+    # Extract the first 3 meaningful words from each service description
+    for service in services[:4]:
+        # Strip trailing notes after ":" or "–"
+        core = re.split(r"[:\-–]", service)[0].strip()
+        core = " ".join(core.split()[:4])
+        if len(core) > 5:
+            queries.append(f"{core} trends 2025")
+            queries.append(f"{core} industry news")
+
+    # Use top keywords directly
+    for kw in keywords[:3]:
+        if len(kw) > 3:
+            queries.append(f"{kw} latest news 2025")
+            queries.append(f"{kw} market trends")
+
+    # Deduplicate (case-insensitive, first 30 chars as key)
+    seen: set[str] = set()
+    unique: list[str] = []
+    for q in queries:
+        key = q.lower()[:30]
+        if key not in seen:
+            seen.add(key)
+            unique.append(q)
+
+    return unique[:6]
 
 
 # ── Free search tools ─────────────────────────────────────────────────────────
@@ -226,43 +259,62 @@ async def search_google_news_rss(query: str, client: httpx.AsyncClient) -> list[
     return results
 
 
-async def search_reddit_rss(subreddit: str, client: httpx.AsyncClient) -> list[TrendItem]:
-    """Reddit RSS — free, community-driven discussions."""
-    url = f"https://www.reddit.com/r/{subreddit}/hot.json?limit=10"
-    results = []
-    try:
-        r = await client.get(
-            url,
-            headers={"User-Agent": "ContentBot/1.0"},
-            timeout=10
-        )
-        if r.status_code != 200:
-            return results
-
-        data = r.json()
-        posts = data.get("data", {}).get("children", [])
-        for post in posts[:5]:
-            d = post.get("data", {})
-            if d.get("score", 0) > 50:  # Only popular posts
-                results.append(TrendItem(
-                    title=d.get("title", ""),
-                    summary=d.get("selftext", "")[:200],
-                    source=f"r/{subreddit}",
-                    url=f"https://reddit.com{d.get('permalink', '')}",
-                    trend_type="community",
-                ))
-    except Exception as e:
-        print(f"[trends] Reddit error for r/{subreddit}: {e}")
-    return results
-
 
 # ── Relevance scoring ─────────────────────────────────────────────────────────
 
 def score_relevance(item: TrendItem, company_keywords: list[str]) -> float:
-    """Score how relevant a trend is to the company (0.0–1.0)."""
-    text = (item.title + " " + item.summary).lower()
-    hits = sum(1 for kw in company_keywords if kw.lower() in text)
-    return min(hits / max(len(company_keywords) * 0.2, 1), 1.0)
+    """
+    Multi-factor relevance scoring.
+
+    Factors (each normalised to 0–1 before weighting):
+      Title exact match   × 3.0  — keyword appears in the headline
+      Full-text match     × 1.0  — keyword appears in title + summary
+      Partial word match  × 0.5  — any individual word of a multi-word kw matches
+    Max raw score = 4.5  → divided to get 0–1.
+    """
+    if not company_keywords:
+        return 0.5
+
+    title_text = item.title.lower()
+    full_text  = (item.title + " " + item.summary).lower()
+    total      = len(company_keywords)
+
+    title_hits   = sum(1 for kw in company_keywords if kw.lower() in title_text)
+    full_hits    = sum(1 for kw in company_keywords if kw.lower() in full_text)
+    partial_hits = sum(
+        1 for kw in company_keywords
+        if any(part in full_text for part in kw.lower().split() if len(part) > 3)
+    )
+
+    raw = (title_hits / total) * 3.0 + (full_hits / total) * 1.0 + (partial_hits / total) * 0.5
+    return min(raw / 4.5, 1.0)
+
+
+def normalize_scores(trends: list[TrendItem]) -> None:
+    """
+    Redistribute scores across [0.05, 1.0] so the displayed range is always
+    progressive — no wall of zeros.  Assumes the list is already sorted by
+    relevance_score descending (or will be sorted after this call).
+
+    Strategy: min-max normalization into [0.05, 1.0].
+    If all items have the same raw score, spread them evenly by rank.
+    """
+    if not trends:
+        return
+
+    scores = [t.relevance_score for t in trends]
+    lo, hi = min(scores), max(scores)
+
+    if hi == lo:
+        # All tied — spread evenly by position
+        n = len(trends)
+        for i, t in enumerate(trends):
+            t.relevance_score = round(1.0 - (0.95 * i / max(n - 1, 1)), 2)
+        return
+
+    for t in trends:
+        normalised = 0.05 + 0.95 * (t.relevance_score - lo) / (hi - lo)
+        t.relevance_score = round(normalised, 2)
 
 
 # ── Theme extraction ──────────────────────────────────────────────────────────
@@ -339,15 +391,24 @@ async def research_trends(
     max_trends: int = 20,
 ) -> TrendReport:
     """
-    Main entry point. Returns a TrendReport with trends, themes, and article angles.
+    Main entry point.  Returns a TrendReport with trends, themes, and article angles.
+
+    Sources: Google News RSS (real-time headlines) + DuckDuckGo web search.
+    Works for any industry — uses preset query maps for known industries and
+    builds queries dynamically from the company's own data for everything else.
     """
     industry = detect_industry(services, top_keywords)
     print(f"\n[trends] Detected industry: {industry}")
 
-    # Get search queries for this industry
-    search_queries = INDUSTRY_SEARCH_TERMS.get(industry, [])
+    # ── Choose search queries ──────────────────────────────────────────────────
+    search_queries = INDUSTRY_SEARCH_TERMS.get(industry)
     if not search_queries:
-        search_queries = [t.format(industry=industry) for t in DEFAULT_SEARCH_TERMS]
+        # Unknown industry (plumbing, law, florists, etc.) — build from company data
+        print(f"[trends] Industry '{industry}' not in preset map — building queries from company data")
+        search_queries = build_dynamic_queries(services, top_keywords)
+        if not search_queries:
+            # Absolute last resort
+            search_queries = [t.format(industry=industry) for t in DEFAULT_SEARCH_TERMS]
 
     all_trends: list[TrendItem] = []
 
@@ -357,51 +418,39 @@ async def research_trends(
         timeout=20,
     ) as client:
 
-        # ── Google News RSS (most reliable, real-time) ────────────────────────
-        for query in search_queries[:4]:
+        # ── Google News RSS — real-time headlines ─────────────────────────────
+        for query in search_queries[:5]:
             print(f"[trends] Google News: {query}")
             results = await search_google_news_rss(query, client)
             all_trends.extend(results)
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(0.4)
 
-        # ── DuckDuckGo web search ─────────────────────────────────────────────
-        for query in search_queries[:3]:
+        # ── DuckDuckGo web search — broader context ───────────────────────────
+        for query in search_queries[:4]:
             print(f"[trends] DuckDuckGo: {query}")
-            results = search_duckduckgo(query, max_results=4)
+            results = search_duckduckgo(query, max_results=5)
             all_trends.extend(results)
 
-        # ── Reddit discussions ────────────────────────────────────────────────
-        reddit_subs = {
-            "interior":          ["interiordesign", "HomeImprovement", "malelivingspace"],
-            "digital marketing": ["PPC", "SEO", "digital_marketing", "FacebookAds"],
-            "seo":               ["SEO", "bigseo", "TechSEO"],
-            "meta ads":          ["FacebookAds", "PPC", "advertising"],
-            "ecommerce":         ["ecommerce", "Entrepreneur", "shopify"],
-            "real estate":       ["realestateinvesting", "india", "RealEstate"],
-        }
-        subs = reddit_subs.get(industry, ["business", "entrepreneur"])
-        for sub in subs[:2]:
-            print(f"[trends] Reddit r/{sub}")
-            results = await search_reddit_rss(sub, client)
-            all_trends.extend(results)
-
-    # ── Deduplicate by title ──────────────────────────────────────────────────
+    # ── Deduplicate by title (first 50 chars) ─────────────────────────────────
     seen_titles: set[str] = set()
-    unique_trends = []
+    unique_trends: list[TrendItem] = []
     for t in all_trends:
         key = t.title.lower()[:50]
         if key not in seen_titles and t.title:
             seen_titles.add(key)
             unique_trends.append(t)
 
-    # ── Score relevance ───────────────────────────────────────────────────────
+    # ── Score relevance (multi-factor) ────────────────────────────────────────
     all_keywords = top_keywords + [s.lower() for s in services]
     for t in unique_trends:
         t.relevance_score = score_relevance(t, all_keywords)
 
-    # Sort: most relevant first
+    # Sort most relevant first, then keep top N
     unique_trends.sort(key=lambda t: t.relevance_score, reverse=True)
     top_trends = unique_trends[:max_trends]
+
+    # Normalize scores to a progressive range so display is never all-zeros
+    normalize_scores(top_trends)
 
     # ── Build report ──────────────────────────────────────────────────────────
     themes = extract_themes(top_trends)
