@@ -250,6 +250,9 @@ export default function ArticleWriterPage({ dna, brief, trend, client, onArticle
       if (result.seo_score !== undefined) {
         setScores({ seo: result.seo_score, aeo: result.aeo_score, geo: result.geo_score });
       }
+      if (result.seo_score !== undefined) {
+        setScores({ seo: result.seo_score, aeo: result.aeo_score, geo: result.geo_score });
+      }
       if (result.seo_title) {
         setArticle({
           content: result.content,
@@ -292,6 +295,8 @@ export default function ArticleWriterPage({ dna, brief, trend, client, onArticle
           </p>
         </Card>
       )}
+
+      <ScoreBoxes scores={scores} />
 
       <ScoreBoxes scores={scores} />
 
