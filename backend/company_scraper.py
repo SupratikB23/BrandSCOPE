@@ -1299,70 +1299,86 @@ async def extract_company_dna(base_url: str) -> CompanyDNA:
         for _als in ["blog", "portfolio"]:
             if not page_contents.get(_als):
                 continue
-            listing_url = next(
-                (u for u in section_candidates.get(_als, [])
-                 if is_listing_url(urlparse(u).path)),
-                None,
-            )
-            if not listing_url:
+
+            # Try ALL listing-level URLs, sorted most-specific first
+            # (so /portfolio/standard-list is tried before /portfolio)
+            all_listing_urls = sorted(
+                [u for u in section_candidates.get(_als, [])
+                 if is_listing_url(urlparse(u).path)],
+                key=lambda u: -len(urlparse(u).path),
+            )[:4]
+            if not all_listing_urls:
                 continue
-            # The listing page's path segment (e.g. "portfolio") used to anchor child links
-            listing_path_prefix = "/" + urlparse(listing_url).path.strip("/").split("/")[0]
 
-            try:
-                await page.goto(listing_url, wait_until="networkidle", timeout=15000)
-            except Exception:
+            for listing_url in all_listing_urls:
                 try:
-                    await page.goto(listing_url, wait_until="domcontentloaded", timeout=12000)
+                    await page.goto(listing_url, wait_until="networkidle", timeout=15000)
                 except Exception:
-                    continue
-            await asyncio.sleep(0.5)
+                    try:
+                        await page.goto(listing_url, wait_until="domcontentloaded", timeout=12000)
+                    except Exception:
+                        continue
+                await asyncio.sleep(0.8)
 
-            # Strip nav/header/footer BEFORE reading links so UI anchors are excluded
-            try:
-                await page.evaluate("""() => {
-                    ['nav','header','footer','.site-header','.site-footer',
-                     '.main-navigation','#site-navigation',
-                     '[class*="nav"]','[class*="menu"]','[id*="menu"]',
-                     '[class*="cookie"]','[class*="popup"]','[class*="modal"]',
-                    ].forEach(sel => {
-                        try {
-                            document.querySelectorAll(sel).forEach(el => el.remove());
-                        } catch(e) {}
-                    });
-                }""")
-            except Exception:
-                pass
+                # Remove ONLY strict structural nav/footer — do NOT use class wildcards
+                # like [class*="nav"] which can nuke portfolio item elements
+                try:
+                    await page.evaluate("""() => {
+                        [
+                            'nav', 'header', 'footer',
+                            '#site-navigation', '#main-navigation',
+                            '.main-navigation', '.site-header', '.site-footer',
+                            '#wpadminbar', '.wpadminbar',
+                            '[class*="cookie"]', '[class*="popup"]', '[class*="modal"]',
+                            '[class*="overlay"]', '[class*="banner"]',
+                        ].forEach(sel => {
+                            try {
+                                document.querySelectorAll(sel).forEach(el => {
+                                    // Safety: don't remove elements that contain many links
+                                    // (could be the actual article grid)
+                                    if (el.querySelectorAll('a').length < 8) el.remove();
+                                });
+                            } catch(e) {}
+                        });
+                    }""")
+                except Exception:
+                    pass
 
-            before_count = len(discovered_articles)
-            for link in await get_page_links():
-                href = _norm_url(link["href"])
-                text = link["text"].strip()
-                if not href or not text:
-                    continue
-                if not _is_same_domain(href, domain):
-                    continue
-                # Must be a deeper path under the listing section, not a nav/top-level link
-                link_path = urlparse(href).path
-                if not link_path.startswith(listing_path_prefix + "/"):
-                    continue
-                # Must be a genuine article slug (not the listing page itself)
-                if _norm_url(href) == _norm_url(listing_url):
-                    continue
-                parts = link_path.strip("/").split("/")
-                if len(parts) < 2 or len(parts[-1]) <= 3:
-                    continue
-                if _UI_TEXT.match(text):
-                    continue
-                # Reject purely uppercase shouting (nav labels like "OUR WORK")
-                if text == text.upper() and len(text.split()) <= 4:
-                    continue
-                if len(text) < 6 or len(text) > 200:
-                    continue
-                if _is_lorem_ipsum(text):
-                    continue
-                discovered_articles.append({"href": href, "text": text, "section": _als})
-            print(f"[DNA] {_als.title()} listing → {len(discovered_articles) - before_count} article links")
+                norm_listing = _norm_url(listing_url)
+                before_count = len(discovered_articles)
+
+                for link in await get_page_links():
+                    href = _norm_url(link["href"])
+                    text = link["text"].strip()
+                    if not href or not text:
+                        continue
+                    if not _is_same_domain(href, domain):
+                        continue
+                    link_path = urlparse(href).path
+                    # Exclude the listing page itself — catches "skip to content"
+                    # anchors that normalise to the same URL after stripping #fragment
+                    if href == norm_listing:
+                        continue
+                    # Must be a genuine article URL (2+ path parts, non-trivial slug)
+                    if not is_article_url(link_path):
+                        continue
+                    # Skip obvious nav/UI text
+                    if _UI_TEXT.match(text):
+                        continue
+                    # Skip pure ALL-CAPS nav labels ("OUR WORK", "SERVICES", etc.)
+                    stripped = re.sub(r"[^A-Za-z ]", "", text)
+                    if stripped == stripped.upper() and len(stripped.split()) <= 5:
+                        continue
+                    if len(text) < 5 or len(text) > 200:
+                        continue
+                    if _is_lorem_ipsum(text):
+                        continue
+                    discovered_articles.append({"href": href, "text": text, "section": _als})
+
+                found = len(discovered_articles) - before_count
+                print(f"[DNA] {_als.title()} listing ({listing_url}) → {found} article links")
+                if found > 0:
+                    break  # found real articles, skip remaining listing URLs
 
         # 4b: BFS-discovered article URLs from blog-classified segments
         if not discovered_articles:
@@ -1446,8 +1462,9 @@ async def extract_company_dna(base_url: str) -> CompanyDNA:
             # Reject obvious UI/nav text (safety net for BFS/sitemap fallback paths)
             if _UI_TEXT.match(text):
                 continue
-            # Reject all-uppercase short strings (nav labels like "OUR WORK")
-            if text == text.upper() and len(text.split()) <= 5:
+            # Reject pure ALL-CAPS nav labels ("OUR WORK", "SERVICES", etc.)
+            stripped = re.sub(r"[^A-Za-z ]", "", text)
+            if stripped == stripped.upper() and len(stripped.split()) <= 5:
                 continue
             # Portfolio-sourced: reject if it looks like a bare company/project name
             if src == "portfolio":
