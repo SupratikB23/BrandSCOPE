@@ -195,6 +195,16 @@ export default function ArticleWriterPage({ dna, brief, trend, client, onArticle
   const activeBrief = brief || {};
   const activeDNA   = dna   || {};
 
+  // When a previous article is selected, show its stored scores; otherwise show live scores
+  const displayScores = selectedPrev
+    ? (selectedPrev.seo_score != null
+        ? { seo: selectedPrev.seo_score, aeo: selectedPrev.aeo_score, geo: selectedPrev.geo_score }
+        : null)
+    : scores;
+
+  // Brief to show in the left panel
+  const displayBrief = (selectedPrev?.brief) || activeBrief;
+
   function startStream(text, fullArticle) {
     setStream(""); setDone(false);
     let i = 0;
@@ -298,18 +308,27 @@ export default function ArticleWriterPage({ dna, brief, trend, client, onArticle
         </Card>
       )}
 
-      <ScoreBoxes scores={scores} />
+      <ScoreBoxes scores={displayScores} />
 
       <div style={{ display: "grid", gridTemplateColumns: "300px 1fr", gap: 16, alignItems: "start" }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           <Card style={{ padding: 16 }}>
-            <p style={{ margin: "0 0 9px", fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-3)", fontFamily: "var(--font-mono)" }}>Active Brief</p>
-            <p style={{ margin: "0 0 8px", fontSize: 13, fontWeight: 600, color: "var(--text)", lineHeight: 1.4 }}>{activeBrief.title || "No brief selected"}</p>
+            <p style={{ margin: "0 0 9px", fontSize: 11, fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-3)", fontFamily: "var(--font-mono)" }}>
+              {selectedPrev ? "Brief Used" : "Active Brief"}
+            </p>
+            <p style={{ margin: "0 0 8px", fontSize: 13, fontWeight: 600, color: "var(--text)", lineHeight: 1.4 }}>{displayBrief.title || "No brief selected"}</p>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 5, marginBottom: 7 }}>
-              {activeBrief.primary_keyword && <Badge color="blue">{activeBrief.primary_keyword}</Badge>}
-              {activeBrief.article_type && <Badge color="gray">{activeBrief.article_type}</Badge>}
-              {activeBrief.word_count && <Badge color="amber">{activeBrief.word_count}w</Badge>}
+              {displayBrief.primary_keyword && <Badge color="blue">{displayBrief.primary_keyword}</Badge>}
+              {displayBrief.article_type && <Badge color="gray">{displayBrief.article_type}</Badge>}
+              {displayBrief.word_count && <Badge color="amber">{displayBrief.word_count}w</Badge>}
             </div>
+            {displayBrief.secondary_keywords?.length > 0 && (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginBottom: 7 }}>
+                {displayBrief.secondary_keywords.slice(0, 4).map((kw, i) => (
+                  <Badge key={i} color="gray" size="xs">{kw}</Badge>
+                ))}
+              </div>
+            )}
             <p style={{ margin: 0, fontSize: 11, color: "var(--text-4)" }}>
               {activeDNA.name || "—"} · {activeDNA.tone_adjectives?.join(", ") || "—"}
             </p>

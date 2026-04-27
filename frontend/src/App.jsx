@@ -301,7 +301,7 @@ export default function App() {
     setSelectedTrend(trend);
     if (client?.id) {
       silentSave(
-        saveClientBrief(client.id, b).then(id => setBriefDbId(id))
+        saveClientBrief(client.id, b).then(res => setBriefDbId(res?.id ?? null))
       );
     }
     setTimeout(() => gotoPage("writer"), 400);
