@@ -68,6 +68,8 @@ class ResearchTrendsRequest(BaseModel):
     services: list[str]
     top_keywords: list[str]
     existing_titles: list[str] = []
+    brand_name: str = ""
+    domain: str = ""
 
 class BuildBriefRequest(BaseModel):
     dna: dict
@@ -119,6 +121,8 @@ async def api_research_trends(req: ResearchTrendsRequest):
             services=req.services,
             top_keywords=req.top_keywords,
             existing_titles=req.existing_titles,
+            brand_name=req.brand_name,
+            domain=req.domain,
         )
         return {
             "industry":          report.industry,
@@ -128,6 +132,8 @@ async def api_research_trends(req: ResearchTrendsRequest):
             "key_themes":        report.key_themes,
             "emerging_keywords": report.emerging_keywords,
             "article_angles":    report.article_angles,
+            "brand_summary":     report.brand_summary,
+            "segments":          report.segments,
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
