@@ -1,11 +1,21 @@
 """
-Engine 2 — Live Trend Researcher
-Finds what's happening RIGHT NOW in any industry.
-Uses only free tools: DuckDuckGo search + Google News RSS.
-No API keys. No cost. Fresh data every run.
+Engine 2 — Live Trend Researcher  (v2)
+Finds what's happening RIGHT NOW in any industry AND about the brand itself.
+
+Sources:
+  • Google News RSS   — real-time headlines (no key needed)
+  • DuckDuckGo DDGS   — broader web context (no key needed)
+  • Gemini 2.0 Flash  — segment classification + brand-aware article angles
+
+Segments produced:
+  brand_news      — recent launches / announcements by the brand
+  brand_future    — roadmap / stated plans / forward-looking signals
+  industry_trend  — broad market trends in their space
+  competitive     — competitor moves / market positioning
 """
 
 import asyncio
+import os
 import re
 import json
 import xml.etree.ElementTree as ET
@@ -38,8 +48,9 @@ class TrendItem:
     source: str
     url: str
     published: Optional[str] = None
-    relevance_score: float = 0.0   # How relevant to the company (0–1)
+    relevance_score: float = 0.0
     trend_type: str = "news"        # "news" | "trend"
+    segment: str = "industry_trend" # "brand_news" | "brand_future" | "industry_trend" | "competitive"
 
 
 @dataclass
@@ -48,9 +59,11 @@ class TrendReport:
     query_used: str
     generated_at: str
     trends: list[TrendItem] = field(default_factory=list)
-    key_themes: list[str] = field(default_factory=list)     # Common threads
+    key_themes: list[str] = field(default_factory=list)
     emerging_keywords: list[str] = field(default_factory=list)
-    article_angles: list[str] = field(default_factory=list)  # Suggested article ideas
+    article_angles: list[str] = field(default_factory=list)
+    brand_summary: str = ""         # 2-sentence summary of brand's current trajectory
+    segments: dict = field(default_factory=dict)  # {segment: count}
 
 
 # ── Industry keyword map ──────────────────────────────────────────────────────
@@ -58,76 +71,76 @@ class TrendReport:
 
 INDUSTRY_SEARCH_TERMS = {
     "interior": [
-        "interior design trends 2025",
+        "interior design trends 2026",
         "home interior new ideas latest",
-        "modular furniture trends India 2025",
+        "modular furniture trends India 2026",
         "smart home interior technology",
         "sustainable interior design",
         "biophilic design trend",
-        "interior design AI tools 2025",
+        "interior design AI tools 2026",
     ],
     "digital marketing": [
-        "digital marketing trends 2025",
-        "SEO algorithm update 2025",
+        "digital marketing trends 2026",
+        "SEO algorithm update 2026",
         "AI marketing tools latest",
         "social media marketing trends",
-        "Google ads update 2025",
-        "Meta ads new features 2025",
-        "content marketing strategy 2025",
+        "Google ads update 2026",
+        "Meta ads new features 2026",
+        "content marketing strategy 2026",
     ],
     "meta ads": [
-        "Meta ads update 2025",
+        "Meta ads update 2026",
         "Facebook ads new features",
-        "Instagram ads performance 2025",
+        "Instagram ads performance 2026",
         "Meta advantage plus campaigns",
         "Meta AI ad targeting",
     ],
     "ppc": [
-        "Google Ads updates 2025",
-        "PPC trends 2025",
+        "Google Ads updates 2026",
+        "PPC trends 2026",
         "Performance Max campaigns tips",
         "smart bidding Google Ads",
         "PPC cost reduction strategies",
     ],
     "seo": [
-        "Google algorithm update 2025",
-        "SEO trends 2025",
+        "Google algorithm update 2026",
+        "SEO trends 2026",
         "Google AI overview SEO",
-        "core web vitals 2025",
+        "core web vitals 2026",
         "search generative experience optimization",
         "E-E-A-T SEO guide",
     ],
     "real estate": [
-        "real estate market trends 2025",
-        "property investment India 2025",
+        "real estate market trends 2026",
+        "property investment India 2026",
         "smart homes real estate",
         "real estate technology trends",
     ],
     "ecommerce": [
-        "ecommerce trends 2025",
-        "online shopping behavior 2025",
+        "ecommerce trends 2026",
+        "online shopping behavior 2026",
         "D2C brand strategy",
         "ecommerce AI tools",
     ],
     "saas": [
-        "SaaS trends 2025",
+        "SaaS trends 2026",
         "B2B SaaS growth strategies",
         "product-led growth SaaS",
-        "SaaS pricing models 2025",
+        "SaaS pricing models 2026",
     ],
     "healthcare": [
-        "healthcare technology trends 2025",
+        "healthcare technology trends 2026",
         "digital health innovations",
-        "telemedicine growth 2025",
-        "health tech India 2025",
+        "telemedicine growth 2026",
+        "health tech India 2026",
     ],
 }
 
 # Default for unknown industries (used only if dynamic builder also fails)
 DEFAULT_SEARCH_TERMS = [
-    "{industry} trends 2025",
+    "{industry} trends 2026",
     "{industry} latest news",
-    "{industry} industry update 2025",
+    "{industry} industry update 2026",
 ]
 
 
@@ -145,13 +158,13 @@ def build_dynamic_queries(services: list[str], keywords: list[str]) -> list[str]
         core = re.split(r"[:\-–]", service)[0].strip()
         core = " ".join(core.split()[:4])
         if len(core) > 5:
-            queries.append(f"{core} trends 2025")
+            queries.append(f"{core} trends 2026")
             queries.append(f"{core} industry news")
 
     # Use top keywords directly
     for kw in keywords[:3]:
         if len(kw) > 3:
-            queries.append(f"{kw} latest news 2025")
+            queries.append(f"{kw} latest news 2026")
             queries.append(f"{kw} market trends")
 
     # Deduplicate (case-insensitive, first 30 chars as key)
@@ -360,7 +373,7 @@ def generate_article_angles(
 
     # Pattern: "The X Guide" using top themes
     for theme in themes[:5]:
-        angle = f"The Complete {theme.title()} Guide for 2025"
+        angle = f"The Complete {theme.title()} Guide for 2026"
         if not any(theme.lower() in e for e in existing_lower):
             angles.append(angle)
 
@@ -368,7 +381,7 @@ def generate_article_angles(
     for trend in trends[:3]:
         headline_words = trend.title.split()[:6]
         topic = " ".join(headline_words)
-        angles.append(f"Why {topic} Is Changing Everything in 2025")
+        angles.append(f"Why {topic} Is Changing Everything in 2026")
 
     # Return top 10 unique angles
     seen = set()
@@ -382,32 +395,207 @@ def generate_article_angles(
     return unique[:10]
 
 
+# ── Brand-specific searches ────────────────────────────────────────────────────
+
+async def _search_brand_activity(
+    brand_name: str,
+    domain: str,
+    client: httpx.AsyncClient,
+) -> list[TrendItem]:
+    """
+    Search for what the brand has DONE and what it's planning.
+    Returns TrendItems pre-tagged with segment brand_news / brand_future.
+    """
+    if not brand_name:
+        return []
+
+    items: list[TrendItem] = []
+
+    # Brand news / recent activity
+    news_queries = [
+        f'"{brand_name}" launch release announcement 2025 2026',
+        f'"{brand_name}" new product update partnership',
+    ]
+    # Brand future / forward-looking
+    future_queries = [
+        f'"{brand_name}" roadmap plans future 2026',
+        f'"{brand_name}" next launch coming soon upcoming',
+    ]
+
+    async def _rss(q: str, seg: str) -> list[TrendItem]:
+        encoded = quote_plus(q)
+        url = f"https://news.google.com/rss/search?q={encoded}&hl=en-IN&gl=IN&ceid=IN:en"
+        try:
+            r = await client.get(url, timeout=15)
+            if r.status_code != 200:
+                return []
+            root = ET.fromstring(r.text)
+            out = []
+            for item in root.findall(".//item")[:6]:
+                title = item.findtext("title", "").strip()
+                desc  = re.sub(r"<[^>]+>", " ", item.findtext("description", "")).strip()[:300]
+                link  = item.findtext("link", "").strip()
+                pub   = item.findtext("pubDate", "").strip()
+                if title:
+                    out.append(TrendItem(
+                        title=title, summary=desc, source="Google News",
+                        url=link, published=pub[:16] if pub else None,
+                        trend_type="news", segment=seg,
+                    ))
+            return out
+        except Exception:
+            return []
+
+    def _ddg(q: str, seg: str) -> list[TrendItem]:
+        if not DDGS_AVAILABLE:
+            return []
+        out = []
+        try:
+            with DDGS() as ddgs:
+                for r in ddgs.text(q, max_results=5):
+                    out.append(TrendItem(
+                        title=r.get("title", ""),
+                        summary=r.get("body", "")[:300],
+                        source=r.get("href", "").split("/")[2] if r.get("href") else "web",
+                        url=r.get("href", ""),
+                        trend_type="news",
+                        segment=seg,
+                    ))
+        except Exception:
+            pass
+        return out
+
+    # Fire all searches concurrently
+    rss_tasks = (
+        [_rss(q, "brand_news") for q in news_queries]
+        + [_rss(q, "brand_future") for q in future_queries]
+    )
+    rss_results = await asyncio.gather(*rss_tasks)
+    for batch in rss_results:
+        items.extend(batch)
+
+    # DDG is sync — run in thread pool
+    def _all_ddg():
+        out = []
+        for q in news_queries:
+            out.extend(_ddg(q, "brand_news"))
+        for q in future_queries:
+            out.extend(_ddg(q, "brand_future"))
+        return out
+
+    try:
+        ddg_items = await asyncio.to_thread(_all_ddg)
+        items.extend(ddg_items)
+    except Exception:
+        pass
+
+    # Filter: only keep results that actually mention the brand name
+    brand_first_word = brand_name.lower().split()[0] if brand_name else ""
+    filtered = [
+        t for t in items
+        if brand_first_word and brand_first_word in (t.title + " " + t.summary).lower()
+    ]
+    print(f"[trends] Brand activity search: {len(filtered)} items for '{brand_name}'")
+    return filtered
+
+
+# ── AI classification + angle generation ──────────────────────────────────────
+
+async def _ai_classify_and_angle(
+    all_trends: list[TrendItem],
+    brand_name: str,
+    services: list[str],
+    api_key: str,
+) -> dict:
+    """
+    Send ALL collected trends to Gemini.
+    Returns: segment classifications per index + brand_summary + article_angles.
+    """
+    if not api_key or not all_trends:
+        return {"classified": [], "brand_summary": "", "angles": []}
+
+    # Build a compact trends list for the prompt (index + title + summary)
+    trends_text = "\n".join(
+        f"[{i}] ({t.segment}) {t.title} — {t.summary[:120]}"
+        for i, t in enumerate(all_trends)
+    )
+
+    prompt = f"""You are a content strategist for the brand "{brand_name}".
+
+BRAND SERVICES: {', '.join(services[:8])}
+
+COLLECTED TRENDS (pre-labelled with initial segment guess):
+{trends_text[:4000]}
+
+Do the following and return ONLY a single valid JSON object (no markdown):
+
+1. Re-classify each trend into the most accurate segment:
+   - "brand_news":      about {brand_name} specifically — recent launches, releases, announcements, partnerships
+   - "brand_future":    forward-looking signals about {brand_name}'s plans, roadmap, upcoming features
+   - "industry_trend":  broad market/technology trend in their space (NOT brand-specific)
+   - "competitive":     about rival brands, alternatives, or market positioning moves in the same space
+
+2. Write a brand_summary: 2 sentences capturing what {brand_name} has been doing recently and what signals suggest they're headed toward.
+
+3. Generate 10-14 article_angles (ready-to-publish titles) that:
+   - Connect SPECIFIC brand activity to SPECIFIC industry trends
+   - Use the brand's actual positioning (from brand_news/brand_future items)
+   - Include at least 3 "brand narrative" angles (explaining what the brand is doing and why it matters)
+   - Include at least 2 "competitive context" angles (how the brand stacks up)
+   - Are punchy, specific — NOT generic fill-in-the-blank titles
+
+{{
+  "classified": [{{"index": 0, "segment": "industry_trend"}}, ...],
+  "brand_summary": "string",
+  "angles": ["title 1", "title 2", ...]
+}}"""
+
+    try:
+        from google import genai as _genai
+        client = _genai.Client(api_key=api_key)
+        resp = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=prompt,
+        )
+        raw = (resp.text or "").strip()
+        raw = re.sub(r"^```[a-z]*\n?", "", raw, flags=re.M).rstrip("`").strip()
+        data = json.loads(raw)
+        print(f"[trends] AI classified {len(data.get('classified', []))} trends, "
+              f"{len(data.get('angles', []))} angles")
+        return data
+    except Exception as e:
+        print(f"[trends] AI classify failed: {e}")
+        return {"classified": [], "brand_summary": "", "angles": []}
+
+
 # ── Main orchestrator ─────────────────────────────────────────────────────────
 
 async def research_trends(
     services: list[str],
     top_keywords: list[str],
     existing_titles: list[str],
-    max_trends: int = 20,
+    brand_name: str = "",
+    domain: str = "",
+    max_trends: int = 25,
 ) -> TrendReport:
     """
-    Main entry point.  Returns a TrendReport with trends, themes, and article angles.
+    Main entry point. Returns a TrendReport with trends segmented and brand-aware angles.
 
-    Sources: Google News RSS (real-time headlines) + DuckDuckGo web search.
-    Works for any industry — uses preset query maps for known industries and
-    builds queries dynamically from the company's own data for everything else.
+    Sources:
+      • Brand-specific searches  — what the brand has done and is planning
+      • Google News RSS          — real-time industry headlines
+      • DuckDuckGo DDGS          — broader web context
+      • Gemini 2.0 Flash         — segment classification + article angle generation
     """
     industry = detect_industry(services, top_keywords)
-    print(f"\n[trends] Detected industry: {industry}")
+    print(f"\n[trends] Detected industry: {industry} | Brand: '{brand_name or '—'}'")
 
-    # ── Choose search queries ──────────────────────────────────────────────────
+    # ── Choose industry search queries ─────────────────────────────────────────
     search_queries = INDUSTRY_SEARCH_TERMS.get(industry)
     if not search_queries:
-        # Unknown industry (plumbing, law, florists, etc.) — build from company data
         print(f"[trends] Industry '{industry}' not in preset map — building queries from company data")
         search_queries = build_dynamic_queries(services, top_keywords)
         if not search_queries:
-            # Absolute last resort
             search_queries = [t.format(industry=industry) for t in DEFAULT_SEARCH_TERMS]
 
     all_trends: list[TrendItem] = []
@@ -418,43 +606,120 @@ async def research_trends(
         timeout=20,
     ) as client:
 
-        # ── Google News RSS — real-time headlines ─────────────────────────────
+        # ── Brand activity (parallel with industry searches) ──────────────────
+        brand_task = asyncio.create_task(
+            _search_brand_activity(brand_name, domain, client)
+        )
+
+        # ── Google News RSS — real-time industry headlines ────────────────────
         for query in search_queries[:5]:
             print(f"[trends] Google News: {query}")
             results = await search_google_news_rss(query, client)
+            for r in results:
+                r.segment = "industry_trend"
             all_trends.extend(results)
-            await asyncio.sleep(0.4)
+            await asyncio.sleep(0.3)
 
-        # ── DuckDuckGo web search — broader context ───────────────────────────
-        for query in search_queries[:4]:
-            print(f"[trends] DuckDuckGo: {query}")
-            results = search_duckduckgo(query, max_results=5)
-            all_trends.extend(results)
+        # ── DuckDuckGo — broader industry context ─────────────────────────────
+        def _run_ddg():
+            out = []
+            for query in search_queries[:4]:
+                out.extend(search_duckduckgo(query, max_results=5))
+            return out
+        try:
+            ddg_results = await asyncio.to_thread(_run_ddg)
+            for r in ddg_results:
+                r.segment = "industry_trend"
+            all_trends.extend(ddg_results)
+        except Exception as e:
+            print(f"[trends] DDG industry search error: {e}")
 
-    # ── Deduplicate by title (first 50 chars) ─────────────────────────────────
+        # Collect brand activity results
+        brand_items = await brand_task
+        # Brand items go FIRST so they get prioritised in dedup/sort
+        all_trends = brand_items + all_trends
+
+        # ── Fallback: if results are thin, supplement with 2025 queries ───────
+        THIN_THRESHOLD = 8
+        if len(all_trends) < THIN_THRESHOLD:
+            print(f"[trends] Only {len(all_trends)} results with 2026 queries — supplementing with 2025…")
+            fallback_queries = [q.replace("2026", "2025") for q in search_queries[:3]]
+            for query in fallback_queries:
+                print(f"[trends] Fallback Google News: {query}")
+                results = await search_google_news_rss(query, client)
+                for r in results:
+                    r.segment = "industry_trend"
+                all_trends.extend(results)
+            def _fb_ddg():
+                out = []
+                for q in fallback_queries[:2]:
+                    out.extend(search_duckduckgo(q, max_results=4))
+                return out
+            try:
+                fb_ddg = await asyncio.to_thread(_fb_ddg)
+                for r in fb_ddg:
+                    r.segment = "industry_trend"
+                all_trends.extend(fb_ddg)
+            except Exception:
+                pass
+            print(f"[trends] After fallback: {len(all_trends)} total results")
+
+    # ── Deduplicate by normalised title ───────────────────────────────────────
     seen_titles: set[str] = set()
     unique_trends: list[TrendItem] = []
     for t in all_trends:
-        key = t.title.lower()[:50]
-        if key not in seen_titles and t.title:
+        key = re.sub(r"\W+", " ", t.title.lower()).strip()[:50]
+        if key and key not in seen_titles:
             seen_titles.add(key)
             unique_trends.append(t)
 
-    # ── Score relevance (multi-factor) ────────────────────────────────────────
+    # ── Score relevance ───────────────────────────────────────────────────────
     all_keywords = top_keywords + [s.lower() for s in services]
+    if brand_name:
+        all_keywords.append(brand_name.lower())
     for t in unique_trends:
-        t.relevance_score = score_relevance(t, all_keywords)
+        base = score_relevance(t, all_keywords)
+        # Boost brand-specific items so they always surface
+        if t.segment in ("brand_news", "brand_future"):
+            t.relevance_score = min(base + 0.3, 1.0)
+        else:
+            t.relevance_score = base
 
-    # Sort most relevant first, then keep top N
     unique_trends.sort(key=lambda t: t.relevance_score, reverse=True)
     top_trends = unique_trends[:max_trends]
-
-    # Normalize scores to a progressive range so display is never all-zeros
     normalize_scores(top_trends)
+
+    # ── AI: re-classify segments + generate brand-aware article angles ─────────
+    api_key = os.getenv("GOOGLE_API_KEY", "")
+    ai_result: dict = {}
+    if api_key:
+        ai_result = await _ai_classify_and_angle(top_trends, brand_name, services, api_key)
+
+        # Apply segment re-classifications from AI
+        classification_map = {
+            c["index"]: c["segment"]
+            for c in ai_result.get("classified", [])
+            if isinstance(c.get("index"), int) and c.get("segment")
+        }
+        for i, t in enumerate(top_trends):
+            if i in classification_map:
+                t.segment = classification_map[i]
+
+    # ── Fall back to template angles if AI didn't produce them ─────────────────
+    ai_angles = ai_result.get("angles", [])
+    if ai_angles:
+        angles = ai_angles
+    else:
+        themes_fb = extract_themes(top_trends)
+        angles = generate_article_angles(themes_fb, top_trends, services, existing_titles)
+
+    # ── Build segment summary counts ───────────────────────────────────────────
+    from collections import Counter
+    seg_counts = dict(Counter(t.segment for t in top_trends))
 
     # ── Build report ──────────────────────────────────────────────────────────
     themes = extract_themes(top_trends)
-    angles = generate_article_angles(themes, top_trends, services, existing_titles)
+    brand_summary = ai_result.get("brand_summary", "")
 
     report = TrendReport(
         industry=industry,
@@ -463,12 +728,16 @@ async def research_trends(
         trends=top_trends,
         key_themes=themes[:8],
         emerging_keywords=themes[:12],
-        article_angles=angles,
+        article_angles=angles[:14],
+        brand_summary=brand_summary,
+        segments=seg_counts,
     )
 
-    print(f"\n[trends] Found {len(top_trends)} relevant trends")
+    print(f"\n[trends] {len(top_trends)} trends | segments: {seg_counts}")
     print(f"[trends] Key themes: {', '.join(themes[:5])}")
-    print(f"[trends] Article angles generated: {len(angles)}")
+    print(f"[trends] Article angles: {len(angles)}")
+    if brand_summary:
+        print(f"[trends] Brand summary: {brand_summary[:100]}...")
 
     return report
 
