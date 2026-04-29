@@ -1,4 +1,4 @@
-# SearchOS
+# BrandSCOPE – Brand Search Content Optimization & Publishing Engine
 
 **A 4-engine content intelligence platform that extracts a brand's DNA, tracks live industry trends, builds SEO/AEO/GEO-scored article briefs, and writes articles that sound exactly like the brand.**
 
