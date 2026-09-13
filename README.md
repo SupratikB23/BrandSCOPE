@@ -3,9 +3,11 @@
 
 # BrandSCOPE – Brand Search Content Optimization & Publishing Engine
 
-**A 4-engine content intelligence platform that extracts a brand's DNA, tracks live industry trends, builds SEO/AEO/GEO-scored article briefs, and writes articles that sound exactly like the brand.**
+[![daily-article](https://github.com/SupratikB23/BrandSCOPE/actions/workflows/daily-article.yml/badge.svg)](https://github.com/SupratikB23/BrandSCOPE/actions/workflows/daily-article.yml)
 
-Runs entirely on localhost. No subscriptions. Powered by Gemini (free tier) and Groq (free tier).
+**A 4-engine content pipeline that extracts a brand's DNA, tracks live industry and brand news, builds an SEO/AEO/GEO-structured brief, writes the article in the brand's voice, and delivers it — on a daily schedule with no human in the loop.**
+
+Free end to end: GitHub Actions, Gemini free tier, Groq free tier, Gmail SMTP, SQLite.
 
 ---
 
@@ -13,39 +15,68 @@ Runs entirely on localhost. No subscriptions. Powered by Gemini (free tier) and 
 
 - [Overview](#overview)
 - [The Four Engines](#the-four-engines)
+- [Automation (GitHub Actions)](#automation-github-actions)
 - [Tech Stack](#tech-stack)
-- [Prerequisites](#prerequisites)
 - [Installation](#installation)
 - [Configuration](#configuration)
 - [Running the Project](#running-the-project)
+- [Known Limits](#known-limits)
 
 ---
 
 ## Overview
 
-SearchOS is a self-hosted brand content platform built around a sequential 4-engine pipeline. Each engine feeds the next one, producing articles that are simultaneously optimized for:
+BrandSCOPE runs as two layers over the same engine code:
 
-- **SEO** - Traditional search engine ranking signals
-- **AEO** - Answer Engine Optimization for featured snippets and AI Overviews
-- **GEO** - Generative Engine Optimization for citation by ChatGPT, Perplexity, and Claude
+| Layer | What it does | Where it runs |
+|---|---|---|
+| **Interactive UI** | React app that runs each engine on demand, with review at every step | Locally (FastAPI + React) |
+| **Scheduled pipeline** | `backend/run_pipeline.py` runs Engine 02 → 03 → 04 → email → commit, unattended | GitHub Actions cron, daily 09:00 IST |
 
-The system manages multiple clients. Each client's full pipeline output - DNA, trends, briefs, and articles - is stored locally in a structured directory layout and a SQLite database.
+Every article is structured for:
+
+- **SEO** — traditional search ranking signals
+- **AEO** — Answer Engine Optimization (featured snippets, AI Overviews)
+- **GEO** — Generative Engine Optimization (citation by ChatGPT, Perplexity, Claude)
 
 ---
 
 ## The Four Engines
 
 **Engine 01 – Brand DNA Extractor** <br>
-Scrapes a brand's website across up to 60 pages using Playwright + BFS crawling, mines JSON-LD structured data, runs DuckDuckGo searches, and synthesizes everything into a structured brand profile via Gemini.
+Crawls up to 60 pages with sitemap parsing + httpx BFS (depth 3), mines JSON-LD, renders with Playwright (accordion/tab expansion, shadow DOM, iframes, raw-HTML fallback), runs web searches, and synthesizes a structured brand profile with Gemini. Runs locally; its output is committed as the pipeline's input.
 
 **Engine 02 – Live Trend Research** <br>
-Pulls real-time signals from Google News RSS and DuckDuckGo, then uses Gemini to classify each result into one of four segments: `brand_news`, `brand_future`, `industry_trend`, `competitive`. Outputs 10–14 ready-to-write article angles.
+Pulls Google News RSS and DuckDuckGo for industry and brand-specific news, then uses Gemini to classify each item into `brand_news`, `brand_future`, `industry_trend`, or `competitive`, write a brand trajectory summary, and generate 10–14 article angles. DuckDuckGo failures degrade gracefully to RSS only.
 
 **Engine 03 – Article Brief Builder** <br>
-Runs gap analysis between existing brand coverage and incoming trends. Produces a structured brief with SEO, AEO, and GEO scores assigned before a word is written.
+Rule-based (no LLM call): picks the primary keyword from brand keywords that overlap the angle, sets secondary keywords, audience, an outline per article type, CTA, and brand-reference rules.
 
 **Engine 04 – Article Writer** <br>
-Writes a complete article in the brand's voice using the brief and Brand DNA as context. Routes between Gemini 2.0 Flash (primary) and Groq (fallback). Filters AI clichés and computes final scores.
+Writes the article in the brand's voice from the brief + DNA. Model routing with fallback: Gemini 3.5 Flash → 3.5 Flash Lite → Flash (latest alias) → Groq Llama 3.3 70B, with retry on 429/503. Post-processing repairs missing structure, a banned-phrase filter catches AI clichés, and a deterministic rubric scores SEO/AEO/GEO (0–100). Output: Markdown + publish-ready HTML with Article and FAQPage JSON-LD.
+
+---
+
+## Automation (GitHub Actions)
+
+Workflow: [`.github/workflows/daily-article.yml`](.github/workflows/daily-article.yml)
+
+```
+cron 03:30 UTC (09:00 IST)  or  manual "Run workflow"
+  → 01 load committed company_dna.json
+  → 02 trend research        (Google News RSS + DDGS + Gemini)
+  → 03 article brief         (rule-based)
+  → 04 article writer        (Gemini → Groq fallback, scored)
+  → 05 email delivery        (Gmail SMTP, HTML body + .md attachment)
+  → commit article, brief, trends and run log back to the repo
+```
+
+- **No browser in CI.** Engines 02–04 need only `backend/requirements-pipeline.txt`. Engine 01 stays local.
+- **Run log.** Every stage records `run_id, stage, status, error, model_used, detail, started_at, finished_at` to the SQLite `runs` table and to `clients/{slug}/runs/run_log.jsonl`, which is committed so history survives the fresh runner. Each run also writes a stage table to the Actions job summary.
+- **Failure handling.** A failed stage marks later stages `skipped`, exits non-zero (red run), and the run log is still committed.
+- **Demo client.** `clients/sarvam-ai/` is the only client folder tracked in git. To schedule another, run Engine 01 locally and add `!clients/<slug>/` to `.gitignore`.
+
+API calls per run: **2 LLM calls** (1 in Engine 02, 1 in Engine 04) when the primary model answers, ~9 Google News RSS requests, ~8 DuckDuckGo queries, 1 SMTP send.
 
 ---
 
@@ -55,152 +86,105 @@ Writes a complete article in the brand's voice using the brief and Brand DNA as 
 
 | Package | Purpose |
 |---|---|
-| FastAPI + Uvicorn | REST API server |
-| Playwright | Full-render browser scraping |
-| httpx | Async HTTP client for BFS crawling and fallback fetches |
-| spaCy (`en_core_web_sm`) | NLP noun chunk extraction for keyword analysis |
-| DDGS | DuckDuckGo web search - no API key |
-| google-genai | Gemini 2.0 Flash - services, tone, USPs, classification, article writing |
-| Groq | LLM fallback for article generation |
-| aiosqlite | Async SQLite for metadata persistence |
-| python-dotenv | Environment variable loading |
+| FastAPI + Uvicorn | REST API server, also serves the built frontend |
+| Playwright | Full-render browser scraping (Engine 01 only) |
+| httpx | Async HTTP for BFS crawling, RSS, fallbacks |
+| spaCy (`en_core_web_sm`) | Noun-chunk keyword extraction (Engine 01 only) |
+| DDGS | DuckDuckGo web search, no API key |
+| google-genai | Gemini — DNA synthesis, trend classification, article writing |
+| Groq | Final LLM fallback |
+| aiosqlite | Async SQLite for records and the run log |
+| smtplib (stdlib) | Email delivery |
 
-**Frontend**
-
-| Package | Purpose |
-|---|---|
-| React 18 | UI framework |
-| Vite 6 | Dev server and production bundler |
-| Framer Motion | Animated landing page and transitions |
+**Frontend:** React 18, Vite 6, Framer Motion
 
 **Storage**
 
 | Layer | What lives here |
 |---|---|
-| `data/searchos.db` | Client metadata, brief records, article metadata, SEO/AEO/GEO scores |
+| `data/searchos.db` | Clients, DNA, trend reports, briefs, articles + scores, `runs` |
 | `clients/{slug}/01_brand_dna/` | `company_dna.json` |
 | `clients/{slug}/02_trend_research/` | `trends_{timestamp}.json` |
 | `clients/{slug}/03_article_briefs/` | `brief_{timestamp}_{title}.json` |
-| `clients/{slug}/04_articles/` | `{slug}.md` (final article in Markdown) |
-
----
-
-## Prerequisites
-
-- **Python** 3.11 or higher
-- **Node.js** 18 or higher
-- **Chromium** - installed automatically by Playwright on first run
-
-**API keys required (both free):**
-
-| Service | Free tier | Link |
-|---|---|---|
-| Google AI Studio (Gemini) | 1,500 requests/day on `gemini-2.0-flash` | aistudio.google.com/app/apikey |
-| Groq | 14,400 requests/day | console.groq.com |
-
-No other paid services, subscriptions, or cloud infrastructure required.
+| `clients/{slug}/04_articles/` | `{date}-{slug}.md` and `.html` |
+| `clients/{slug}/runs/` | `run_log.jsonl` |
 
 ---
 
 ## Installation
 
-### 1. Clone the repository
+Requires Python 3.11+ and Node.js 18+.
 
 ```bash
-git clone https://github.com/your-username/search-optimization.git
-cd "Search Optimization"
-```
+git clone https://github.com/SupratikB23/BrandSCOPE.git
+cd BrandSCOPE
 
-### 2. Install Python dependencies
-
-```bash
-cd backend
-pip install -r requirements.txt
-```
-
-### 3. Install Playwright browsers
-
-```bash
+pip install -r backend/requirements.txt
 playwright install chromium
-```
-
-### 4. Download the spaCy language model
-
-```bash
 python -m spacy download en_core_web_sm
-```
 
-### 5. Install frontend dependencies
-
-```bash
-cd ../frontend
+cd frontend
 npm install
-```
-
-### 6. Build the frontend
-
-```bash
 npm run build
+cd ..
 ```
-
-The built assets in `frontend/dist/` are served directly by the FastAPI server, so you do not need to run a separate dev server in production.
 
 ---
 
 ## Configuration
 
-Copy the example environment file and fill in your keys:
-
 ```bash
 cp backend/.env.example backend/.env
 ```
 
-```env
-# backend/.env
+| Variable | Required | Purpose |
+|---|---|---|
+| `GOOGLE_API_KEY` | Yes | Gemini — [aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey) |
+| `GROQ_API_KEY` | Recommended | Fallback LLM — [console.groq.com](https://console.groq.com) |
+| `SMTP_USER` / `SMTP_PASS` | For email | Gmail address + [App Password](https://myaccount.google.com/apppasswords) |
+| `EMAIL_TO` | No | Recipient(s), defaults to `SMTP_USER` |
+| `GEMINI_MODELS` | No | Override the Gemini chain, comma-separated |
+| `DISABLE_DDGS` | No | `1` = skip DuckDuckGo, Google News RSS only |
 
-GOOGLE_API_KEY=your_gemini_api_key_here
-GROQ_API_KEY=your_groq_api_key_here
-```
-
-Both keys are used only on your local machine and are never sent anywhere except the respective APIs.
+For GitHub Actions, add the same values under **Settings → Secrets and variables → Actions**.
 
 ---
 
 ## Running the Project
 
-### Production mode (single command)
+**UI (single process)**
 
 ```bash
-# From the project root
-npm run server
+npm run server        # FastAPI on http://localhost:8000, serves frontend/dist
 ```
 
-This starts the FastAPI server on `http://localhost:8000`. The frontend is served from `frontend/dist/` at the same origin - no separate frontend process needed.
+**UI (hot reload)** — `cd backend && python run.py` in one terminal, `cd frontend && npm run dev` in another (http://localhost:5173).
 
-### Development mode (hot reload)
-
-Open two terminals:
+**Headless pipeline (same as CI)**
 
 ```bash
-# Terminal 1 - Backend
-cd backend
-python run.py
-
-# Terminal 2 - Frontend (hot reload)
-cd frontend
-npm run dev
+python backend/run_pipeline.py --client sarvam-ai            # 02 → 03 → 04 → email
+python backend/run_pipeline.py --client sarvam-ai --no-email --type listicle
 ```
 
-The Vite dev server runs on `http://localhost:5173` and proxies API calls to `http://localhost:8000`.
+**Run log:** `GET http://localhost:8000/api/runs`
+
+---
+
+## Known Limits
+
+- **Engine 01 blocks its HTTP request** for the whole crawl (minutes). The right design is a job ID + background worker + status polling.
+- **SEO/AEO/GEO scores are heuristic.** A deterministic rubric (keyword placement, headings, FAQ, stats, attributions) — not validated against real ranking or citation data.
+- **Generated statistics must be fact-checked** before publishing; the model is instructed to cite sources but can invent them.
+- **Scheduled runs are best effort.** GitHub may delay cron runs at peak load and disables schedules after 60 days without repository activity.
+- **DuckDuckGo rate-limits datacenter IPs.** On CI, Engine 02 may run on Google News RSS alone.
+- **Not deployed as a web app.** Playwright needs Chromium, so serverless hosts cannot run Engine 01; it needs a container.
 
 ---
 
 ## Documentation
 
-> For architecture diagrams, full API reference, database schema, pipeline details, and development notes — <br>
-> **[View the full technical documentation in DOCS.md →](./DOCS.md)**
-
----
+Architecture, API reference, database schema and pipeline details: **[DOCS.md](./DOCS.md)**
 
 ## Architecture Diagram
 
