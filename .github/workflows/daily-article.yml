@@ -1,4 +1,5 @@
 name: daily-article
+run-name: "${{ github.event_name == 'workflow_dispatch' && format('BrandSCOPE run for {0}', inputs.client) || 'BrandSCOPE scheduled run' }}"
 
 # Engine 02 (trends) → 03 (brief) → 04 (article) → email → commit, every day.
 # Engine 01 (Playwright crawl) runs locally; its company_dna.json is committed.
@@ -85,7 +86,10 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add clients/
+          # Validate before using the input in a path
+          if ! [[ "$CLIENT" =~ ^[a-z0-9][a-z0-9-]*$ ]]; then echo "Invalid client: $CLIENT"; exit 1; fi
+          # -f: new brands pushed from the UI live under the git-ignored clients/ folder
+          git add -f -- "clients/$CLIENT"
           if git diff --staged --quiet; then echo "Nothing to commit"; exit 0; fi
           git commit -m "pipeline run: $CLIENT $(date -u +%F) [$OUTCOME]"
           git pull --rebase origin "$GITHUB_REF_NAME"
