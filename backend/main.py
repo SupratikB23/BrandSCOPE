@@ -29,7 +29,7 @@ Usage:
     python main.py --url https://clientwebsite.com --test
 
     # Use a specific Gemini model:
-    python main.py --url https://client.com --model gemini-1.5-flash
+    python main.py --url https://client.com --model gemini-3.5-flash-lite
 
     # Multi-client setup:
     python main.py --url https://client-a.com --output clients/client-a --articles 3
@@ -75,7 +75,7 @@ async def run_pipeline(
     article_type: str = None,
     output_dir: str = "output",
     api_key: str = None,
-    gemini_model: str = "gemini-2.0-flash",
+    gemini_model: str = "gemini-3.5-flash",
     test_mode: bool = False,
 ):
     print("\n" + "═" * 60)
@@ -211,12 +211,12 @@ Examples:
   python main.py --url https://myinteriors.com --articles 3
   python main.py --dna company_dna.json --articles 5 --type listicle
   python main.py --url https://example.com --test
-  python main.py --url https://client.com --model gemini-1.5-flash --articles 3
+  python main.py --url https://client.com --model gemini-3.5-flash-lite --articles 3
 
 Gemini models (all free tier):
-  gemini-2.0-flash     — default, fastest, 1,500 req/day
-  gemini-1.5-flash     — alternative, very similar quality
-  gemini-1.5-pro       — highest quality, lower free tier limits
+  gemini-3.5-flash       — default (override chain with GEMINI_MODELS)
+  gemini-3.5-flash-lite  — faster, separate quota
+  gemini-flash-latest    — alias for Google's current Flash
         """,
     )
     parser.add_argument("--url",      help="Brand website URL to scrape")
@@ -225,8 +225,8 @@ Gemini models (all free tier):
                         help="Number of articles to generate (default: 3)")
     parser.add_argument("--type",     choices=list(ARTICLE_TYPES.keys()),
                         help="Force a specific article type for all articles")
-    parser.add_argument("--model",    default="gemini-2.0-flash",
-                        help="Gemini model to use (default: gemini-2.0-flash)")
+    parser.add_argument("--model",    default="gemini-3.5-flash",
+                        help="Gemini model to use (default: gemini-3.5-flash)")
     parser.add_argument("--api-key",  dest="api_key",
                         help="Google AI Studio API key (or set GOOGLE_API_KEY env var)")
     parser.add_argument("--output",   default="output",
