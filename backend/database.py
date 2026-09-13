@@ -264,6 +264,11 @@ async def get_client(client_id: int) -> dict | None:
             (client_id,),
         )).fetchone()
         c["dna"] = json.loads(dna_row["dna_json"]) if dna_row else None
+        if c["dna"] is None:
+            # Clients created by the headless pipeline only have the committed DNA file
+            dna_file = CLIENTS_DIR / c["slug"] / "01_brand_dna" / "company_dna.json"
+            if dna_file.exists():
+                c["dna"] = json.loads(dna_file.read_text(encoding="utf-8"))
 
         trend_row = await (await db.execute(
             "SELECT report_json FROM trend_reports WHERE client_id = ? ORDER BY created_at DESC LIMIT 1",

@@ -31,7 +31,11 @@ from article_generator import (
     build_brief, write_article, ArticleBrief,
     quality_check, has_banned_phrases, compute_seo_aeo_geo_scores,
 )
+import httpx
+
 import database as db
+import dna_jobs
+import github_actions as gh
 from database import get_article
 from llm import GEMINI_MODEL
 
@@ -291,6 +295,93 @@ async def api_list_runs(limit: int = 100):
         return await db.list_runs(limit)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Brand Autopilot: brand name → Engine 01 job → GitHub Actions workflow ─────
+
+class AutopilotScrapeRequest(BaseModel):
+    query: str
+
+class RunWorkflowRequest(BaseModel):
+    client_id: int
+    article_type: str = "rotate"
+
+
+@app.post("/api/autopilot/scrape")
+async def api_autopilot_scrape(req: AutopilotScrapeRequest):
+    if not req.query.strip():
+        raise HTTPException(status_code=400, detail="Enter a brand name or website")
+    try:
+        job = dna_jobs.start_job(req.query.strip())
+    except RuntimeError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+    return job.to_dict()
+
+
+@app.get("/api/autopilot/jobs/{job_id}")
+async def api_autopilot_job(job_id: str):
+    job = dna_jobs.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Scrape job not found (the server may have restarted)")
+    return job.to_dict()
+
+
+@app.get("/api/github/status")
+async def api_github_status():
+    return await gh.connection_status()
+
+
+@app.post("/api/github/run-workflow")
+async def api_run_workflow(req: RunWorkflowRequest):
+    if req.article_type not in gh.ARTICLE_TYPES:
+        raise HTTPException(status_code=400, detail=f"article_type must be one of {', '.join(gh.ARTICLE_TYPES)}")
+    client = await db.get_client(req.client_id)
+    if not client:
+        raise HTTPException(status_code=404, detail="Client not found")
+    slug = client["slug"]
+    if not gh.SLUG_RE.match(slug):
+        raise HTTPException(status_code=400, detail=f"Client slug '{slug}' is not a valid folder name")
+    if not client.get("dna"):
+        raise HTTPException(status_code=400, detail="This brand has no DNA yet. Scrape it first.")
+
+    status = await gh.connection_status()
+    if not status["ok"]:
+        raise HTTPException(status_code=400, detail=status["message"])
+    try:
+        publish = await gh.publish_dna(status["repo"], status["branch"], slug, client["dna"])
+        dispatch = await gh.dispatch_workflow(status["repo"], status["branch"], slug, req.article_type)
+    except (gh.GitHubError, httpx.HTTPError) as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    return {
+        "client": slug,
+        "repo": status["repo"],
+        "branch": status["branch"],
+        "actions_url": status["actions_url"],
+        "publish": publish,
+        **dispatch,
+    }
+
+
+@app.get("/api/github/runs")
+async def api_github_recent_runs(limit: int = 8):
+    try:
+        ctx = await gh.repo_context()
+        return await gh.recent_runs(ctx["repo"], min(max(limit, 1), 30))
+    except (gh.GitHubError, httpx.HTTPError) as e:
+        raise HTTPException(status_code=502, detail=str(e))
+
+
+@app.get("/api/github/runs/{run_id}")
+async def api_github_run(run_id: int, client: str = ""):
+    """Live status of one workflow run; once completed, also what it committed."""
+    try:
+        ctx = await gh.repo_context()
+        run = await gh.run_status(ctx["repo"], run_id)
+        if run["status"] == "completed" and gh.SLUG_RE.match(client):
+            run["outputs"] = await gh.run_outputs(ctx["repo"], ctx["branch"], client, run_id)
+        return run
+    except (gh.GitHubError, httpx.HTTPError) as e:
+        raise HTTPException(status_code=502, detail=str(e))
 
 
 # ── Serve the built frontend (npm run build) at the same origin ───────────────
