@@ -77,3 +77,22 @@ export const saveClientArticle = (clientId, article, briefId = null) =>
 
 export const getClientArticle = (clientId, articleId) =>
   get(`/api/clients/${clientId}/articles/${articleId}`);
+
+
+// ── Brand Autopilot + GitHub Actions ──────────────────────────────────────────
+
+export const startAutopilotScrape = (query) =>
+  post('/api/autopilot/scrape', { query });
+
+export const getAutopilotJob = (jobId) =>
+  get(`/api/autopilot/jobs/${jobId}`);
+
+export const getGitHubStatus = () => get('/api/github/status');
+
+export const runWorkflow = (clientId, articleType) =>
+  post('/api/github/run-workflow', { client_id: clientId, article_type: articleType });
+
+export const getWorkflowRun = (runId, clientSlug) =>
+  get(`/api/github/runs/${runId}?client=${encodeURIComponent(clientSlug || '')}`);
+
+export const getRecentRuns = () => get('/api/github/runs');
