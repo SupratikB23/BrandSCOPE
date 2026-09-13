@@ -74,7 +74,22 @@ cron 03:30 UTC (09:00 IST)  or  manual "Run workflow"
 - **No browser in CI.** Engines 02–04 need only `backend/requirements-pipeline.txt`. Engine 01 stays local.
 - **Run log.** Every stage records `run_id, stage, status, error, model_used, detail, started_at, finished_at` to the SQLite `runs` table and to `clients/{slug}/runs/run_log.jsonl`, which is committed so history survives the fresh runner. Each run also writes a stage table to the Actions job summary.
 - **Failure handling.** A failed stage marks later stages `skipped`, exits non-zero (red run), and the run log is still committed.
-- **Demo client.** `clients/sarvam-ai/` is the only client folder tracked in git. To schedule another, run Engine 01 locally and add `!clients/<slug>/` to `.gitignore`.
+- **Demo client.** `clients/sarvam-ai/` is the default client for scheduled runs. Other brands run on demand from the UI's Brand Autopilot (below); the commit step uses `git add -f -- clients/<slug>` so their outputs are committed even though `clients/` is git-ignored.
+- **Run name.** Manual runs show as `BrandSCOPE run for <slug>` in the Actions tab, which is also how the UI finds the run it dispatched.
+
+### Brand Autopilot (UI → Actions)
+
+```
+type "Zepto" in the UI
+  → resolve website        (DuckDuckGo, Gemini fallback, verified by HTTP)
+  → Engine 01 locally      (background job, live log in the UI)
+  → Run Workflow           commits clients/<slug>/01_brand_dna/company_dna.json via the GitHub API
+                           dispatches daily-article.yml with client=<slug>
+  → live step status       polled from the Actions API
+  → results                run-log stages + article read back from the repo
+```
+
+The UI never writes pipeline outputs to your local disk. Run `git pull` afterwards to get the committed files.
 
 API calls per run: **2 LLM calls** (1 in Engine 02, 1 in Engine 04) when the primary model answers, ~9 Google News RSS requests, ~8 DuckDuckGo queries, 1 SMTP send.
 
@@ -145,8 +160,10 @@ cp backend/.env.example backend/.env
 | `EMAIL_TO` | No | Recipient(s), defaults to `SMTP_USER` |
 | `GEMINI_MODELS` | No | Override the Gemini chain, comma-separated |
 | `DISABLE_DDGS` | No | `1` = skip DuckDuckGo, Google News RSS only |
+| `GITHUB_TOKEN` | For Run Workflow | Fine-grained PAT for this repo: **Contents** Read and write + **Actions** Read and write. Local `.env` only, never a repo secret |
+| `GITHUB_REPO` | No | `owner/name`, defaults to `SupratikB23/BrandSCOPE` |
 
-For GitHub Actions, add the same values under **Settings → Secrets and variables → Actions**.
+For GitHub Actions, add the LLM and SMTP values under **Settings → Secrets and variables → Actions**. Runs started from the UI use those secrets, including the email recipient.
 
 ---
 
@@ -169,11 +186,22 @@ python backend/run_pipeline.py --client sarvam-ai --no-email --type listicle
 
 **Run log:** `GET http://localhost:8000/api/runs`
 
+**Brand Autopilot:** open http://localhost:8000 → Open the Engine → type a brand name → **Scrape brand** → **Run Workflow** → `git pull` when the run finishes.
+
+| Endpoint | Purpose |
+|---|---|
+| `POST /api/autopilot/scrape` `{query}` | Start a brand-name scrape job |
+| `GET /api/autopilot/jobs/{id}` | Job status + live log |
+| `GET /api/github/status` | Token / repo / workflow check |
+| `POST /api/github/run-workflow` `{client_id, article_type}` | Commit DNA + dispatch the workflow |
+| `GET /api/github/runs` · `GET /api/github/runs/{run_id}?client=<slug>` | Recent runs · live status and outputs |
+
 ---
 
 ## Known Limits
 
-- **Engine 01 blocks its HTTP request** for the whole crawl (minutes). The right design is a job ID + background worker + status polling.
+- **Engine 01 on the manual Brand DNA page still blocks its HTTP request** for the whole crawl. Brand Autopilot runs it as an in-process background job instead (one scrape at a time, lost on server restart).
+- **Some sites block headless browsers.** Heavily bot-protected or app-only brands may yield thin DNA; enter the website URL directly if the name resolves to the wrong site.
 - **SEO/AEO/GEO scores are heuristic.** A deterministic rubric (keyword placement, headings, FAQ, stats, attributions) — not validated against real ranking or citation data.
 - **Generated statistics must be fact-checked** before publishing; the model is instructed to cite sources but can invent them.
 - **Scheduled runs are best effort.** GitHub may delay cron runs at peak load and disables schedules after 60 days without repository activity.

@@ -9,7 +9,7 @@ const MODELS = [
   { id: "groq/llama-3.3-70b-versatile",  label: "Groq · Llama 3.3 70B",    badge: "Free",         color: "amber",  note: "Final fallback · Add GROQ_API_KEY to .env" },
 ];
 
-function renderMd(md) {
+export function renderMd(md) {
   if (!md) return "";
   let h = md
     .replace(/^# (.+)$/gm,  '<h1 class="art-h1">$1</h1>')
