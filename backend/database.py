@@ -100,6 +100,21 @@ CREATE TABLE IF NOT EXISTS generated_articles (
     quality_passed   INTEGER NOT NULL DEFAULT 0,
     created_at       TEXT    NOT NULL
 );
+
+-- One row per pipeline stage per run (scheduled or manual)
+CREATE TABLE IF NOT EXISTS runs (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    run_id      TEXT    NOT NULL,
+    client_id   INTEGER REFERENCES clients(id) ON DELETE CASCADE,
+    stage       TEXT    NOT NULL,
+    status      TEXT    NOT NULL,
+    error       TEXT    NOT NULL DEFAULT '',
+    model_used  TEXT    NOT NULL DEFAULT '',
+    detail      TEXT    NOT NULL DEFAULT '',
+    trigger     TEXT    NOT NULL DEFAULT 'manual',
+    started_at  TEXT    NOT NULL,
+    finished_at TEXT    NOT NULL
+);
 """
 
 
@@ -108,12 +123,14 @@ async def init_db():
     async with aiosqlite.connect(DB_PATH) as db:
         await db.executescript(_SCHEMA)
         await db.commit()
-        # Migrate: add score columns if they don't exist yet
-        for col in ("seo_score", "aeo_score", "geo_score"):
+        # Migrate: add columns if they don't exist yet
+        migrations = [
+            f"ALTER TABLE generated_articles ADD COLUMN {col} INTEGER NOT NULL DEFAULT 0"
+            for col in ("seo_score", "aeo_score", "geo_score")
+        ] + ["ALTER TABLE generated_articles ADD COLUMN model_used TEXT NOT NULL DEFAULT ''"]
+        for stmt in migrations:
             try:
-                await db.execute(
-                    f"ALTER TABLE generated_articles ADD COLUMN {col} INTEGER NOT NULL DEFAULT 0"
-                )
+                await db.execute(stmt)
                 await db.commit()
             except Exception:
                 pass  # column already exists
@@ -150,6 +167,52 @@ async def create_client(url: str) -> dict:
             "SELECT * FROM clients WHERE id = ?", (cid,)
         )).fetchone()
         return dict(row)
+
+
+async def get_or_create_client_by_slug(slug: str, url: str, name: str = "") -> dict:
+    """Used by the headless pipeline, which knows a client by its folder name."""
+    now = _now()
+    _make_client_dirs(slug)
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        row = await (await db.execute("SELECT * FROM clients WHERE slug = ?", (slug,))).fetchone()
+        if row:
+            return dict(row)
+        domain = urlparse(url).netloc.lower().removeprefix("www.")
+        await db.execute(
+            "INSERT INTO clients (name, domain, slug, url, created_at, updated_at) VALUES (?,?,?,?,?,?)",
+            (name or domain, domain, slug, url, now, now),
+        )
+        await db.commit()
+        row = await (await db.execute("SELECT * FROM clients WHERE slug = ?", (slug,))).fetchone()
+        return dict(row)
+
+
+async def log_run_stage(entry: dict) -> None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            """INSERT INTO runs (run_id, client_id, stage, status, error, model_used,
+                                 detail, trigger, started_at, finished_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?)""",
+            (
+                entry["run_id"], entry.get("client_id"), entry["stage"], entry["status"],
+                entry.get("error", ""), entry.get("model_used", ""), entry.get("detail", ""),
+                entry.get("trigger", "manual"), entry["started_at"], entry["finished_at"],
+            ),
+        )
+        await db.commit()
+
+
+async def list_runs(limit: int = 100) -> list[dict]:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        rows = await (await db.execute(
+            """SELECT r.*, c.slug AS client_slug FROM runs r
+               LEFT JOIN clients c ON c.id = r.client_id
+               ORDER BY r.id DESC LIMIT ?""",
+            (limit,),
+        )).fetchall()
+        return [dict(r) for r in rows]
 
 
 async def list_clients() -> list[dict]:
@@ -365,8 +428,8 @@ async def save_article(client_id: int, brief_id: int | None, article: dict) -> i
             """INSERT INTO generated_articles
                (client_id, brief_id, title, article_slug, content_md,
                 word_count, seo_title, meta_description, quality_passed,
-                seo_score, aeo_score, geo_score, created_at)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                seo_score, aeo_score, geo_score, model_used, created_at)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 client_id,
                 brief_id,
@@ -380,6 +443,7 @@ async def save_article(client_id: int, brief_id: int | None, article: dict) -> i
                 article.get("seo_score", 0),
                 article.get("aeo_score", 0),
                 article.get("geo_score", 0),
+                article.get("model_used", ""),
                 now,
             ),
         )
@@ -397,6 +461,10 @@ async def save_article(client_id: int, brief_id: int | None, article: dict) -> i
             f"keyword: {article.get('primary_keyword', '')}\n"
             f"word_count: {article.get('word_count', 0)}\n"
             f"quality_passed: {bool(article.get('quality_passed'))}\n"
+            f"seo_score: {article.get('seo_score', 0)}\n"
+            f"aeo_score: {article.get('aeo_score', 0)}\n"
+            f"geo_score: {article.get('geo_score', 0)}\n"
+            f"model_used: {article.get('model_used', '')}\n"
             f"created_at: {now}\n"
             f"---\n\n"
         )
