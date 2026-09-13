@@ -167,7 +167,7 @@ export default function LandingPage({ onEnter }) {
             letterSpacing: "0.12em",
             textTransform: "uppercase",
             fontFamily: "var(--font-ui)",
-          }}>SearchOS</span>
+          }}>BrandSCOPE</span>
           <Badge color="green">v1.0 Free</Badge>
         </motion.div>
 
