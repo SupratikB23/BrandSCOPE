@@ -6,6 +6,7 @@ import BrandDNAPage     from './BrandDNA';
 import TrendResearchPage from './TrendResearch';
 import BriefBuilderPage from './BriefBuilder';
 import ArticleWriterPage from './ArticleWriter';
+import AutopilotPage    from './Autopilot';
 import {
   getClient,
   saveClientDNA,
@@ -92,10 +93,10 @@ function Sidebar({ active, setActive, completed, dark, setDark, clientName, onBa
               fontSize: 14, fontWeight: 800, color: "#fff",
               fontFamily: "var(--font-display)",
               boxShadow: "0 0 14px var(--accent-glow)",
-            }}>S</div>
+            }}>B</div>
             <div>
-              <div style={{ fontSize: 13, fontWeight: 800, color: "var(--text)", letterSpacing: "-0.03em", lineHeight: 1.1, fontFamily: "var(--font-display)" }}>SearchOS</div>
-              <div style={{ fontSize: 9, color: "var(--text-4)", fontFamily: "var(--font-mono)", letterSpacing: "0.06em" }}>v1.0 · FREE</div>
+              <div style={{ fontSize: 13, fontWeight: 800, color: "var(--text)", letterSpacing: "-0.03em", lineHeight: 1.1, fontFamily: "var(--font-display)" }}>BrandSCOPE</div>
+              <div style={{ fontSize: 9, color: "var(--text-4)", fontFamily: "var(--font-mono)", letterSpacing: "0.06em" }}>v2.0 · FREE</div>
             </div>
           </div>
           <ThemeToggle dark={dark} setDark={setDark} />
@@ -210,8 +211,9 @@ function TopBar({ page, dark, setDark }) {
 // ── Root App ──────────────────────────────────────────────────────────────────
 
 export default function App() {
-  // Screens: "landing" | "clients" | "app"
+  // Screens: "landing" | "clients" | "autopilot" | "app"
   const [screen, setScreen]     = useState("landing");
+  const [autopilot, setAutopilot] = useState(null);  // { query } or { client }
   const [page,   setPage]       = useState("dna");
   const [dark,   setDark]       = useState(() => localStorage.getItem("so_theme") !== "light");
 
@@ -234,7 +236,7 @@ export default function App() {
 
   // ── Silent save helper ─────────────────────────────────────────────────────
   function silentSave(promise) {
-    promise.catch(err => console.warn("[SearchOS] Auto-save failed:", err));
+    promise.catch(err => console.warn("[BrandSCOPE] Auto-save failed:", err));
   }
 
   // ── Navigation ─────────────────────────────────────────────────────────────
@@ -353,7 +355,24 @@ export default function App() {
         setDark={setDark}
         onSelectClient={handleSelectClient}
         onNewClient={handleNewClient}
+        onAutopilot={opts => { setAutopilot({ ...opts, key: Date.now() }); gotoScreen("autopilot"); }}
       />
+    );
+  }
+
+  if (screen === "autopilot") {
+    return (
+      <ErrorBoundary>
+        <AutopilotPage
+          key={autopilot?.key}
+          initialQuery={autopilot?.query || ""}
+          initialClient={autopilot?.client || null}
+          dark={dark}
+          setDark={setDark}
+          onBack={() => gotoScreen("clients")}
+          onOpenClient={handleSelectClient}
+        />
+      </ErrorBoundary>
     );
   }
 
