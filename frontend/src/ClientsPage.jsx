@@ -16,7 +16,7 @@ const ACCENT_PALETTE = [
 
 // ── Client card ───────────────────────────────────────────────────────────────
 
-function ClientCard({ client, onOpen, onDelete, accentColor }) {
+function ClientCard({ client, onOpen, onAutopilot, onDelete, accentColor }) {
   const [confirmDel, setConfirmDel] = useState(false);
   const [deleting,   setDeleting]   = useState(false);
   const [hovered,    setHovered]    = useState(false);
@@ -146,9 +146,22 @@ function ClientCard({ client, onOpen, onDelete, accentColor }) {
       </div>
 
       {/* Footer */}
-      <p style={{ margin: 0, fontSize: 10, color: "var(--text-4)", fontFamily: "var(--font-mono)" }}>
-        Updated {lastUpdated}
-      </p>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+        <p style={{ margin: 0, fontSize: 10, color: "var(--text-4)", fontFamily: "var(--font-mono)" }}>
+          Updated {lastUpdated}
+        </p>
+        <button
+          onClick={e => { e.stopPropagation(); onAutopilot(client); }}
+          title="Scrape (if needed) and run the GitHub Actions workflow for this brand"
+          style={{
+            background: "var(--accent-subtle)", border: "1px solid var(--accent-border)",
+            color: "var(--accent)", borderRadius: 6, padding: "3px 9px",
+            fontSize: 11, fontWeight: 600, cursor: "pointer", fontFamily: "var(--font-ui)",
+          }}
+        >
+          ▶ Autopilot
+        </button>
+      </div>
     </div>
   );
 }
@@ -218,7 +231,44 @@ function NewBrandForm({ onCreated, onCancel }) {
 
 // ── Main ClientsPage ──────────────────────────────────────────────────────────
 
-export default function ClientsPage({ onSelectClient, onNewClient, dark, setDark }) {
+// ── Autopilot hero: brand name → scrape → Run Workflow ────────────────────────
+
+function AutopilotHero({ onStart }) {
+  const [brand, setBrand] = useState("");
+  const go = () => brand.trim() && onStart(brand.trim());
+
+  return (
+    <div className="fade-up" style={{
+      marginBottom: 30, padding: "22px 24px",
+      background: "var(--surface)", border: "1px solid var(--accent-border)", borderRadius: 14,
+      boxShadow: "0 0 32px var(--accent-glow)",
+    }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+        <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.14em", textTransform: "uppercase", color: "var(--accent)", fontFamily: "var(--font-mono)" }}>Brand Autopilot</span>
+      </div>
+      <p style={{ margin: "0 0 4px", fontSize: 17, fontWeight: 800, color: "var(--text)", fontFamily: "var(--font-display)", letterSpacing: "-0.02em" }}>
+        Just type a brand name
+      </p>
+      <p style={{ margin: "0 0 14px", fontSize: 12, color: "var(--text-3)", lineHeight: 1.6 }}>
+        BrandSCOPE finds its website, scrapes the brand DNA, and lets you Run Workflow on GitHub Actions to research, write, email, and commit a new article.
+      </p>
+      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+        <Input
+          value={brand}
+          onChange={setBrand}
+          placeholder="e.g. Zepto"
+          prefix="◎"
+          style={{ flex: 1, minWidth: 220 }}
+          onKeyDown={e => e.key === "Enter" && go()}
+        />
+        <Btn onClick={go} disabled={!brand.trim()} size="md">Scrape brand →</Btn>
+      </div>
+    </div>
+  );
+}
+
+
+export default function ClientsPage({ onSelectClient, onNewClient, onAutopilot, dark, setDark }) {
   const [clients,    setClients]    = useState([]);
   const [loading,    setLoading]    = useState(true);
   const [showForm,   setShowForm]   = useState(false);
@@ -273,8 +323,8 @@ export default function ClientsPage({ onSelectClient, onNewClient, dark, setDark
             fontSize: 14, fontWeight: 800, color: "#fff",
             fontFamily: "var(--font-display)",
             boxShadow: "0 0 12px var(--accent-glow)",
-          }}>S</div>
-          <span style={{ fontSize: 14, fontWeight: 800, color: "var(--text)", letterSpacing: "-0.03em", fontFamily: "var(--font-display)" }}>SearchOS</span>
+          }}>B</div>
+          <span style={{ fontSize: 14, fontWeight: 800, color: "var(--text)", letterSpacing: "-0.03em", fontFamily: "var(--font-display)" }}>BrandSCOPE</span>
           <span style={{ color: "var(--border-strong)", fontSize: 15, margin: "0 2px" }}>/</span>
           <span style={{ fontSize: 12, color: "var(--text-3)", fontFamily: "var(--font-mono)" }}>brands</span>
         </div>
@@ -309,6 +359,8 @@ export default function ClientsPage({ onSelectClient, onNewClient, dark, setDark
             <Btn onClick={() => setShowForm(true)} size="md">+ New Brand</Btn>
           )}
         </div>
+
+        <AutopilotHero onStart={query => onAutopilot({ query })} />
 
         {/* New brand form (inline) */}
         {showForm && (
@@ -352,6 +404,7 @@ export default function ClientsPage({ onSelectClient, onNewClient, dark, setDark
                 key={c.id}
                 client={c}
                 onOpen={onSelectClient}
+                onAutopilot={client => onAutopilot({ client })}
                 onDelete={handleDelete}
                 accentColor={ACCENT_PALETTE[i % ACCENT_PALETTE.length]}
               />
