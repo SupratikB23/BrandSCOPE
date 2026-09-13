@@ -3,10 +3,10 @@ import { SectionHeader, Card, Badge, Btn, Input, Spinner, Divider } from './comp
 import { writeArticle, getClientArticle } from './api';
 
 const MODELS = [
-  { id: "gemini-2.0-flash",               label: "Gemini 2.0 Flash",         badge: "Recommended",  color: "green",  note: "1,500 req/day free · Fastest" },
-  { id: "gemini-2.0-flash-lite",          label: "Gemini 2.0 Flash Lite",    badge: "Fallback",     color: "blue",   note: "Separate quota · Use if Flash exhausted" },
-  { id: "gemini-2.5-flash-preview-04-17", label: "Gemini 2.5 Flash Preview", badge: "Best Quality", color: "purple", note: "Most capable · Lower free quota" },
-  { id: "groq/llama-3.3-70b-versatile",  label: "Groq · Llama 3.3 70B",    badge: "14,400/day",   color: "amber",  note: "Free forever · Add GROQ_API_KEY to .env" },
+  { id: "gemini-3.5-flash",              label: "Gemini 3.5 Flash",         badge: "Recommended",  color: "green",  note: "Free tier · Primary model" },
+  { id: "gemini-3.5-flash-lite",         label: "Gemini 3.5 Flash Lite",    badge: "Fallback",     color: "blue",   note: "Separate quota · Use if Flash exhausted" },
+  { id: "gemini-flash-latest",           label: "Gemini Flash (latest)",    badge: "Alias",        color: "purple", note: "Tracks Google's current Flash model" },
+  { id: "groq/llama-3.3-70b-versatile",  label: "Groq · Llama 3.3 70B",    badge: "Free",         color: "amber",  note: "Final fallback · Add GROQ_API_KEY to .env" },
 ];
 
 function renderMd(md) {
@@ -159,7 +159,7 @@ function ScoreBoxes({ scores }) {
 }
 
 export default function ArticleWriterPage({ dna, brief, trend, client, onArticleReady }) {
-  const [model, setModel]       = useState("gemini-2.0-flash");
+  const [model, setModel]       = useState("gemini-3.5-flash");
   const [apiKey, setApiKey]     = useState("");
   const [generating, setGen]    = useState(false);
   const [article, setArticle]   = useState(null);
