@@ -1,0 +1,92 @@
+name: daily-article
+
+# Engine 02 (trends) → 03 (brief) → 04 (article) → email → commit, every day.
+# Engine 01 (Playwright crawl) runs locally; its company_dna.json is committed.
+
+on:
+  schedule:
+    - cron: '30 3 * * *'   # 03:30 UTC = 09:00 IST. GitHub may delay scheduled runs at peak times.
+  workflow_dispatch:
+    inputs:
+      client:
+        description: 'Client folder under clients/'
+        required: true
+        default: 'sarvam-ai'
+      article_type:
+        description: 'Article type'
+        type: choice
+        default: rotate
+        options: [rotate, educational, listicle, guide, trend-report, opinion, case-study]
+      send_email:
+        description: 'Email the article'
+        type: boolean
+        default: true
+      disable_ddgs:
+        description: 'Skip DuckDuckGo (Google News RSS only)'
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: daily-article
+  cancel-in-progress: false
+
+jobs:
+  pipeline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CLIENT: ${{ inputs.client || 'sarvam-ai' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: backend/requirements-pipeline.txt
+
+      - name: Install pipeline dependencies (no Playwright / spaCy)
+        run: pip install -r backend/requirements-pipeline.txt
+
+      - name: Run pipeline
+        id: pipeline
+        env:
+          GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          SMTP_USER: ${{ secrets.SMTP_USER }}
+          SMTP_PASS: ${{ secrets.SMTP_PASS }}
+          EMAIL_TO: ${{ secrets.EMAIL_TO }}
+          DISABLE_DDGS: ${{ inputs.disable_ddgs && '1' || '' }}
+          SEND_EMAIL: ${{ github.event_name == 'schedule' || inputs.send_email }}
+          ARTICLE_TYPE: ${{ inputs.article_type }}
+        run: |
+          args=(--client "$CLIENT")
+          if [ "$SEND_EMAIL" != "true" ]; then args+=(--no-email); fi
+          if [ -n "$ARTICLE_TYPE" ] && [ "$ARTICLE_TYPE" != "rotate" ]; then args+=(--type "$ARTICLE_TYPE"); fi
+          python backend/run_pipeline.py "${args[@]}"
+
+      - name: Upload article and run log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: brandscope-${{ env.CLIENT }}-${{ github.run_id }}
+          path: |
+            clients/${{ env.CLIENT }}/04_articles/
+            clients/${{ env.CLIENT }}/runs/run_log.jsonl
+          if-no-files-found: ignore
+
+      - name: Commit outputs and run log
+        if: always()
+        env:
+          OUTCOME: ${{ steps.pipeline.outcome }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add clients/
+          if git diff --staged --quiet; then echo "Nothing to commit"; exit 0; fi
+          git commit -m "pipeline run: $CLIENT $(date -u +%F) [$OUTCOME]"
+          git pull --rebase origin "$GITHUB_REF_NAME"
+          git push origin "HEAD:$GITHUB_REF_NAME"
