@@ -25,7 +25,12 @@ from typing import Optional
 from urllib.parse import urljoin, urlparse
 from collections import Counter, defaultdict
 
-from playwright.async_api import async_playwright
+# Playwright is only needed for Engine 01. Importing lazily lets Engines 02–04
+# (which import CompanyDNA from here) run in CI without a browser install.
+try:
+    from playwright.async_api import async_playwright
+except ImportError:
+    async_playwright = None
 
 # ── ddgs — web search (same lib used by trend_researcher) ─────────────────────
 try:
@@ -871,16 +876,10 @@ tone_perspective: EXACTLY "first person" or "third person"
 brand_keywords: 10-20 specific technical or brand terms (product names, methods, tech, etc.)"""
 
     try:
-        from google import genai as _genai
-        client = _genai.Client(api_key=api_key)
-        resp = client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=prompt,
-        )
-        raw = (resp.text or "").strip()
-        # Strip markdown fences if Gemini adds them anyway
-        raw = re.sub(r"^```[a-z]*\n?", "", raw, flags=re.M).rstrip("`").strip()
-        data = json.loads(raw)
+        from llm import gemini_generate, strip_json_fences
+        raw, model_used = await gemini_generate(prompt, api_key)
+        print(f"[DNA] AI intel model: {model_used}")
+        data = json.loads(strip_json_fences(raw))
 
         tone = {
             "adjectives":   data.get("tone_adjectives", []),
@@ -966,6 +965,8 @@ def _dedup_titles(titles: list[str]) -> list[str]:
 # ── Core scraping function ─────────────────────────────────────────────────────
 
 async def extract_company_dna(base_url: str) -> CompanyDNA:
+    if async_playwright is None:
+        raise RuntimeError("Playwright is not installed — run: pip install playwright && playwright install chromium")
     base_url = base_url.rstrip("/")
     domain   = urlparse(base_url).netloc
 
@@ -2029,15 +2030,16 @@ async def extract_company_dna(base_url: str) -> CompanyDNA:
 
 
 def save_dna(dna: CompanyDNA, path: str = "company_dna.json"):
-    with open(path, "w") as f:
-        json.dump(asdict(dna), f, indent=2)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(asdict(dna), f, indent=2, ensure_ascii=False)
     print(f"[DNA] Saved to {path}")
 
 
 def load_dna(path: str = "company_dna.json") -> CompanyDNA:
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         data = json.load(f)
-    return CompanyDNA(**data)
+    known = set(CompanyDNA.__dataclass_fields__)
+    return CompanyDNA(**{k: v for k, v in data.items() if k in known})
 
 
 if __name__ == "__main__":
