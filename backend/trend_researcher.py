@@ -38,6 +38,12 @@ except ImportError:
         DDGS_AVAILABLE = False
         print("[warn] ddgs not installed. Run: pip install ddgs")
 
+# Kill switch: DuckDuckGo rate-limits datacenter IPs (GitHub Actions, HF Spaces).
+# DISABLE_DDGS=1 forces Engine 02 to run on Google News RSS alone.
+if os.environ.get("DISABLE_DDGS", "").lower() in ("1", "true", "yes"):
+    DDGS_AVAILABLE = False
+    print("[trends] DISABLE_DDGS set — DuckDuckGo disabled, Google News RSS only")
+
 
 # ── Data model ────────────────────────────────────────────────────────────────
 
@@ -64,6 +70,7 @@ class TrendReport:
     article_angles: list[str] = field(default_factory=list)
     brand_summary: str = ""         # 2-sentence summary of brand's current trajectory
     segments: dict = field(default_factory=dict)  # {segment: count}
+    model_used: str = ""            # Gemini model that classified trends ("" = template fallback)
 
 
 # ── Industry keyword map ──────────────────────────────────────────────────────
@@ -551,21 +558,16 @@ Do the following and return ONLY a single valid JSON object (no markdown):
 }}"""
 
     try:
-        from google import genai as _genai
-        client = _genai.Client(api_key=api_key)
-        resp = client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=prompt,
-        )
-        raw = (resp.text or "").strip()
-        raw = re.sub(r"^```[a-z]*\n?", "", raw, flags=re.M).rstrip("`").strip()
-        data = json.loads(raw)
+        from llm import gemini_generate, strip_json_fences
+        raw, model_used = await gemini_generate(prompt, api_key)
+        data = json.loads(strip_json_fences(raw))
+        data["model_used"] = model_used
         print(f"[trends] AI classified {len(data.get('classified', []))} trends, "
-              f"{len(data.get('angles', []))} angles")
+              f"{len(data.get('angles', []))} angles ({model_used})")
         return data
     except Exception as e:
         print(f"[trends] AI classify failed: {e}")
-        return {"classified": [], "brand_summary": "", "angles": []}
+        return {"classified": [], "brand_summary": "", "angles": [], "model_used": ""}
 
 
 # ── Main orchestrator ─────────────────────────────────────────────────────────
@@ -731,6 +733,7 @@ async def research_trends(
         article_angles=angles[:14],
         brand_summary=brand_summary,
         segments=seg_counts,
+        model_used=ai_result.get("model_used", ""),
     )
 
     print(f"\n[trends] {len(top_trends)} trends | segments: {seg_counts}")

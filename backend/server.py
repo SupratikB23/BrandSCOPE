@@ -33,9 +33,10 @@ from article_generator import (
 )
 import database as db
 from database import get_article
+from llm import GEMINI_MODEL
 
 
-app = FastAPI(title="SearchOS API")
+app = FastAPI(title="BrandSCOPE API")
 
 app.add_middleware(
     CORSMiddleware,
@@ -48,7 +49,7 @@ app.add_middleware(
 @app.on_event("startup")
 async def startup():
     await db.init_db()
-    print("[searchos] Database ready at", db.DB_PATH)
+    print("[brandscope] Database ready at", db.DB_PATH)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -81,7 +82,7 @@ class WriteArticleRequest(BaseModel):
     brief: dict
     dna: dict
     trend: dict
-    model: str = "gemini-2.0-flash"
+    model: str = GEMINI_MODEL
     api_key: str | None = None
 
 # ── Client management models ──────────────────────────────────────────────────
@@ -179,6 +180,7 @@ async def api_write_article(req: WriteArticleRequest):
             "seo_score":        scores["seo"],
             "aeo_score":        scores["aeo"],
             "geo_score":        scores["geo"],
+            "model_used":       article.model_used,
         }
     except HTTPException:
         raise
@@ -279,3 +281,22 @@ async def api_get_article(client_id: int, article_id: int):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Run log (written by backend/run_pipeline.py) ──────────────────────────────
+
+@app.get("/api/runs")
+async def api_list_runs(limit: int = 100):
+    try:
+        return await db.list_runs(limit)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Serve the built frontend (npm run build) at the same origin ───────────────
+# Mounted last so /api/* routes above take precedence.
+
+_DIST = Path(__file__).parent.parent / "frontend" / "dist"
+if _DIST.is_dir():
+    from fastapi.staticfiles import StaticFiles
+    app.mount("/", StaticFiles(directory=_DIST, html=True), name="frontend")
