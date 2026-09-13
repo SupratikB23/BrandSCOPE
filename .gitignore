@@ -22,7 +22,16 @@ clients/*/output/
 
 # Local SQLite database
 data/
-clients/
+
+# Client data stays local, except the demo client used by the scheduled
+# GitHub Actions pipeline (its DNA is the pipeline input; daily outputs and
+# runs/run_log.jsonl are committed back as the audit trail).
+# To schedule another client, add a line: !clients/<slug>/
+clients/*
+!clients/sarvam-ai/
+
+# Personal notes (not part of the project)
+brandscope-interview-prep.md
 
 # API keys & secrets
 .env
