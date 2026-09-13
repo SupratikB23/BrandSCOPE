@@ -288,6 +288,7 @@ class GeneratedArticle:
     meta_description: str   # 150–160 chars
     schema_faq: list[dict]
     quality_passed: bool = False
+    model_used: str = ""    # which model in the fallback chain produced the content
 
 
 # ── Brief builder (Engine 3) ──────────────────────────────────────────────────
@@ -302,6 +303,12 @@ ARTICLE_TYPES = {
 }
 
 
+_WEAK_KEYWORDS = {
+    "what", "company", "people", "brands", "something", "error", "english",
+    "india", "indian", "business", "businesses", "services", "competition",
+}
+
+
 def build_brief(
     dna: CompanyDNA,
     trend: TrendItem,
@@ -310,10 +317,15 @@ def build_brief(
 ) -> ArticleBrief:
     """Build a detailed article brief from company DNA + a chosen trend."""
 
-    trend_words = re.findall(r"\b[a-zA-Z]{4,}\b", trend.title.lower())
-    company_words = dna.top_keywords[:5]
-    overlap = [w for w in trend_words if w in company_words]
-    primary_kw = overlap[0] if overlap else (dna.top_keywords[0] if dna.top_keywords else "industry")
+    # Skip filler words the NLP keyword extractor sometimes lets through ("what", "company")
+    usable = [
+        k for k in (dna.brand_keywords + dna.top_keywords)
+        if len(k) > 3 and k.lower() not in _WEAK_KEYWORDS
+    ]
+    hook_text = f"{angle} {trend.title}".lower()
+    # Whole-word match so "Indus" does not match "industry"
+    overlap = [k for k in usable if re.search(rf"\b{re.escape(k.lower())}\b", hook_text)]
+    primary_kw = overlap[0] if overlap else (usable[0] if usable else "industry")
 
     sections = _build_section_outline(article_type, angle, dna, trend)
 
@@ -406,7 +418,11 @@ def _build_section_outline(
         ],
     }
 
-    return outlines.get(article_type, outlines["educational"])
+    year = datetime.now(timezone.utc).year
+    return [
+        s.replace("2025–2026", f"{year}–{year + 1}").replace("2025", str(year))
+        for s in outlines.get(article_type, outlines["educational"])
+    ]
 
 
 # ── Master prompt builder ─────────────────────────────────────────────────────
@@ -652,16 +668,11 @@ OUTPUT ONLY THE ARTICLE. Begin immediately with # [Title]. No preamble, no comme
 
 # ── Gemini writer (Engine 4) ──────────────────────────────────────────────────
 
-GEMINI_MODEL = "gemini-2.0-flash"
+from llm import GEMINI_MODEL, GROQ_FALLBACK_MODEL, gemini_chain, gemini_config
 
 # Fallback chain tried in order when a model's quota is exhausted or not found.
 # Prefix "groq/" means use the Groq API instead of Gemini.
-GEMINI_FALLBACK_CHAIN = [
-    "gemini-2.0-flash",
-    "gemini-2.0-flash-lite",
-    "gemini-2.5-flash-preview-04-17",
-    "groq/llama-3.3-70b-versatile",
-]
+GEMINI_FALLBACK_CHAIN = gemini_chain() + [GROQ_FALLBACK_MODEL]
 
 
 def _parse_gemini_error(err_str: str) -> tuple[str, int]:
@@ -705,7 +716,7 @@ async def _call_groq(groq_key: str, model: str, prompt: str) -> str:
             model=groq_model,
             messages=[{"role": "user", "content": prompt}],
             temperature=0.75,
-            max_tokens=2500,
+            max_tokens=4096,
         )
         return resp.choices[0].message.content.strip()
 
@@ -732,13 +743,15 @@ async def write_article(
 
     gemini_key = api_key if api_key is not None else os.environ.get("GOOGLE_API_KEY", "")
     groq_key   = os.environ.get("GROQ_API_KEY", "")
+    model_used = "placeholder"
 
     # If no Gemini key at all, go straight to Groq (or placeholder)
     if not gemini_key:
         if groq_key:
             print("[writer] No Gemini key — trying Groq directly.")
             try:
-                content = await _call_groq(groq_key, "groq/llama-3.3-70b-versatile", prompt)
+                content = await _call_groq(groq_key, GROQ_FALLBACK_MODEL, prompt)
+                model_used = GROQ_FALLBACK_MODEL
                 print("[writer] Success with Groq (no Gemini key)")
             except Exception as e:
                 print(f"[writer] Groq failed: {e}")
@@ -752,11 +765,6 @@ async def write_article(
         content = None
 
         gemini_client = genai.Client(api_key=gemini_key)
-        gemini_config = genai_types.GenerateContentConfig(
-            temperature=0.75,
-            top_p=0.9,
-            max_output_tokens=2500,
-        )
 
         for attempt_model in queue:
             is_groq = attempt_model.startswith("groq/")
@@ -775,8 +783,12 @@ async def write_article(
                     if is_groq:
                         content = await _call_groq(groq_key, attempt_model, prompt)
                     else:
-                        content = await _call_gemini(gemini_client, attempt_model, prompt, gemini_config)
+                        content = await _call_gemini(
+                            gemini_client, attempt_model, prompt,
+                            gemini_config(temperature=0.75, model=attempt_model),
+                        )
 
+                    model_used = attempt_model
                     print(f"[writer] Success with {attempt_model}")
                     break  # success — exit retry loop
                 except Exception as e:
@@ -827,6 +839,7 @@ async def write_article(
         meta_description=meta_desc,
         schema_faq=faq,
         quality_passed=quality_passed,
+        model_used=model_used,
     )
 
 
