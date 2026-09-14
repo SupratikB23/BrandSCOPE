@@ -29,9 +29,7 @@ data/
 # To schedule another client, add a line: !clients/<slug>/
 clients/*
 !clients/sarvam-ai/
-
-# Personal notes (not part of the project)
-brandscope-interview-prep.md
+BrandSCOPE.md
 
 # API keys & secrets
 .env
