@@ -1,0 +1,300 @@
+{
+  "industry": "saas",
+  "query_used": "SaaS trends 2026, B2B SaaS growth strategies, product-led growth SaaS",
+  "generated_at": "2026-09-17T08:49:18.828587+00:00",
+  "trends": [
+    {
+      "title": "Sarvam AI (2026): India’s $1.5 Billion Sovereign AI Unicorn",
+      "summary": "April 1, 2026 - Beyond Language: At the India AI Impact Summit 2026, co-founder Pratyush Kumar announced a roadmap to solve complex problems in Mathematics, Science, and Programming natively in Indian contexts.",
+      "source": "founderpin.com",
+      "url": "https://founderpin.com/startup_story/sarvam-ai/",
+      "published": null,
+      "relevance_score": 1.0,
+      "trend_type": "news",
+      "segment": "brand_future"
+    },
+    {
+      "title": "Sarvam and C-DAC come together to build India’s sovereign AI stack, from silicon to application - Sarvam AI",
+      "summary": "Sarvam and C-DAC come together to build India’s sovereign AI stack, from silicon to application &nbsp;&nbsp; Sarvam AI",
+      "source": "Google News",
+      "url": "https://news.google.com/rss/articles/CBMiUEFVX3lxTE1KNnIwLUQyejVkdmZqQV8xNzFDRXhpM1JuTVFKRjF2R2Q3WFQ1Mi00MnlaMEZ3cVYwTW1Yb29iYVRGdFpKWkZvREdlYUJYUzBo?oc=5",
+      "published": "Fri, 04 Sep 2026",
+      "relevance_score": 0.74,
+      "trend_type": "news",
+      "segment": "brand_news"
+    },
+    {
+      "title": "Sarvam AI Launches New Multilingual Foundation Models to Advance India’s Indigenous AI Ecosystem - CXO Digitalpulse",
+      "summary": "Sarvam AI Launches New Multilingual Foundation Models to Advance India’s Indigenous AI Ecosystem &nbsp;&nbsp; CXO Digitalpulse",
+      "source": "Google News",
+      "url": "https://news.google.com/rss/articles/CBMixwFBVV95cUxPbmo2V3RHY0hoTzZjZGlUR3Y4QmMyQjREdWZjbDJqb3l4ZnQ0YUV4OWh4Y2RzR2tROEY1RFV1LWREanQxZHdTdVJ4ZWpMYlZZZVpjelhuZDI3UVFXb3hpN2lEa3lsNExLNWs1REFXaGhuWEVjRjhINVBVMTVzMDNYckhsU2lBYkVNb0o4QW0tZUs4MVJvWUdRMDJFeEx6cmI2SEtzbDBnU2ZuTXNaNjdHVVlOYU5rb1diS3NzR2txWjFnRzVQUi1J?oc=5",
+      "published": "Tue, 09 Jun 2026",
+      "relevance_score": 0.74,
+      "trend_type": "news",
+      "segment": "brand_news"
+    },
+    {
+      "title": "Sarvam AI's Sovereign AI Infrastructure Play at Epoch 2026 Is India's Boldest Tech Bet Yet",
+      "summary": "August 1, 2026 - Sarvam AI unveils a trillion-parameter model and full sovereign AI infrastructure stack at Epoch 2026. Here's what every enterprise and developer needs to know.",
+      "source": "entrepreneurloop.com",
+      "url": "https://entrepreneurloop.com/sarvam-ai-epoch-2026-sovereign-ai-infrastructure-roadmap/",
+      "published": null,
+      "relevance_score": 0.74,
+      "trend_type": "news",
+      "segment": "brand_future"
+    },
+    {
+      "title": "Sarvam AI launches platform to help build India-centric AI models - The Hindu",
+      "summary": "August 8, 2026 - It also announced partnerships with three IITs and two state governments for pilot projects in education and public service delivery. Sarvam AI said Epoch Builder Edition will be available in private preview from August 2026, with general ...",
+      "source": "www.thehindu.com",
+      "url": "https://www.thehindu.com/sci-tech/technology/sarvam-ai-launches-platform-to-help-build-india-centric-ai-models/article71289797.ece",
+      "published": null,
+      "relevance_score": 0.72,
+      "trend_type": "news",
+      "segment": "brand_news"
+    },
+    {
+      "title": "Sarvam AI to Launch India's First LLM in Six Months",
+      "summary": "Sarvam AI, backed by IndiaAI Mission, is set to launch India's first sovereign Large Language Model within six months. Learn about its features, resources, challenges, and impact.",
+      "source": "aitoolinsight.com",
+      "url": "https://aitoolinsight.com/sarvam-ai-india-llm/",
+      "published": null,
+      "relevance_score": 0.64,
+      "trend_type": "news",
+      "segment": "brand_future"
+    },
+    {
+      "title": "Sarvam 30B & 105B Launched: India's Sovereign Multilingual AI Models ...",
+      "summary": "In a landmark moment for India's AI ecosystem, Bengaluru-based startup Sarvam AI launched two new foundational large language models—Sarvam 30B and Sarvam 105B—at the India AI Impact Summit 2026 in New Delhi's Bharat Mandapam on February 18, 2026.",
+      "source": "vfuturemedia.com",
+      "url": "https://vfuturemedia.com/ai/sarvam-30b-105b-launched-indias-sovereign-multilingual-ai-models-unveiled-at-india-ai-summit-2026/",
+      "published": null,
+      "relevance_score": 0.56,
+      "trend_type": "news",
+      "segment": "brand_news"
+    },
+    {
+      "title": "Rise of Sarvam AI as India's voice in global AI policy talks - The Times of India",
+      "summary": "Rise of Sarvam AI as India's voice in global AI policy talks &nbsp;&nbsp; The Times of India",
+      "source": "Google News",
+      "url": "https://news.google.com/rss/articles/CBMi2gFBVV95cUxQdWNkUENjTmZ4SEs3WXA4MzV0VV9Od1E3LWt1NGozemZEckhjdkNmeXBUNllGX1ZQWHBtb3FQa2lGbnFPZ2tEUkpLX05PdmRuLVZYZHVELVU5a3UyYmFMZS03TjlSSHZsci01clFTLUN5Y3BhSkNKYXQ0b0RjSFhLZDkxY0xuYXFTWDJFRkdFVWZCWVBaU1RMbTBsVWEtZHlUcEpEZERZa2M0OXl5Y2JrTHNISFJzNkdwT1l4ZkRwbl9Oa21paWNoWGdwRzNzWm5HT0tDU3lUX0xHQQ?oc=5",
+      "published": "Mon, 22 Jun 2026",
+      "relevance_score": 0.54,
+      "trend_type": "news",
+      "segment": "brand_news"
+    },
+    {
+      "title": "Sarvam has a new plan to boost engagement, says it will give creators early access to AI models - India Today",
+      "summary": "Sarvam has a new plan to boost engagement, says it will give creators early access to AI models &nbsp;&nbsp; India Today",
+      "source": "Google News",
+      "url": "https://news.google.com/rss/articles/CBMi8wFBVV95cUxQY2JJTXNhWXBhMm90c1d5bTVHaWIxSGpFUThsTTBPUnYwOTVReE5zYW45M0luc0ZNT2dQR2ZvWmdIQnFZc2ZRLU1qOEkwdHlUUFVmbGhDN2JqdUZqam9QZWpqR0VHNmhxTDk1NTZnWnZjdlNqR0NkaEhJOW1fR1BTc0xKNUlYSk5VS0padzgtNGI1NFpUUkgxRGtKT2drcFlmSHR5RkJ4RG9YQ1NBVkVKMFZsb0I2N3BvQVZwMzFLM3p1ZmtSWGtFQ1dDWV9KZlJPbHJtenJ1ZVk3eExYZ1h3US1RbGxEV012WVhEZ0VZM2RGYnfSAfgBQVVfeXFMTmdwdmJ5TmwtbUdXQ25KdmozLW8wZnVmUnBuNGZLNjNWZUV2Qi1QT0FKNW5TMUhZN3dEZnB3SHBYYndNV0hEOW9vdXdDT1gxTDBSX2cxanVCbGZYVngtZWlUUUF0NUs2STljajhiVUprbXI3ekFwM3pfRDFFVzFURHY5U3JBaHVRd2VYMF9hSlNZSDU4M0tySUk1Ympadkx2dDFPU2RKcWF1aGF1Ni1YXzBhQXhYS0lhcG5RLXl0a0lWZHEzRUpWcnRtdUVyTWFsNnhnQjQ3bm5aRENxamlSZ2Jjb3U2ZWFlMDVIVDdhSzFGQmhZd1FHamU?oc=5",
+      "published": "Mon, 31 Aug 2026",
+      "relevance_score": 0.51,
+      "trend_type": "news",
+      "segment": "brand_future"
+    },
+    {
+      "title": "Sarvam AI Epoch 2026: Sovereign AI Infrastructure Roadmap",
+      "summary": "August 1, 2026 - Sarvam AI unveils a trillion-parameter model and full sovereign AI infrastructure stack at Epoch 2026. Here's what every enterprise and developer needs to know.",
+      "source": "entrepreneurloop.com",
+      "url": "https://entrepreneurloop.com/sarvam-ai-epoch-2026-sovereign-ai-infrastructure-roadmap/",
+      "published": null,
+      "relevance_score": 0.51,
+      "trend_type": "news",
+      "segment": "brand_future"
+    },
+    {
+      "title": "HCLTech Acquires 10.5% Stake in Sarvam AI in $150.7 Million Strategic Investment - indiainfoline.com",
+      "summary": "HCLTech Acquires 10.5% Stake in Sarvam AI in $150.7 Million Strategic Investment &nbsp;&nbsp; indiainfoline.com",
+      "source": "Google News",
+      "url": "https://news.google.com/rss/articles/CBMiwAFBVV95cUxQTm90QV9QZGtEelRXQnhiMFZ1YzhzWkEzaEI0UFQ3SWkwdTRWZURLaHVIS1FUb3pWWFFneV9iU1NuaUJtS1RUSWI3QnZESEptM2cyQTBBRVY4Y0dYTGoyN2FLb0NJM29TdkYxZm5EMndjd0pQTDdsMHM5dkZ4S0xfcDZRNjdoLWZDNS1uZ3hlN2UyanlPOVN0QjFlX2xUNnkxa21UbzNSM1lCZ25TdHp5eDBqSkFrWUJDWk9vVldsM2k?oc=5",
+      "published": "Tue, 16 Jun 2026",
+      "relevance_score": 0.46,
+      "trend_type": "news",
+      "segment": "brand_news"
+    },
+    {
+      "title": "Sarvam AI - Wikipedia",
+      "summary": "Sarvam AI (lit. 'all' or 'wholeness') [1] is an Indian artificial intelligence company headquartered in Bengaluru, Karnataka. Founded in 2023, the company develops large language models (LLMs) such as Indus [2] and multimodal AI systems with a focus on Indian languages and region-specific use cases.",
+      "source": "en.wikipedia.org",
+      "url": "https://en.wikipedia.org/wiki/Sarvam_AI",
+      "published": null,
+      "relevance_score": 0.46,
+      "trend_type": "news",
+      "segment": "brand_news"
+    },
+    {
+      "title": "Sarvam raises $300M Series B | Sarvam AI",
+      "summary": "June 15, 2026 - We are positioned to both help them adopt and innovate on AI. The partnership with HCLTech provides a unique example of an Indian corporate helping build foundational strength in AI.",
+      "source": "www.sarvam.ai",
+      "url": "https://www.sarvam.ai/announcing-series-b",
+      "published": null,
+      "relevance_score": 0.46,
+      "trend_type": "news",
+      "segment": "brand_news"
+    },
+    {
+      "title": "Sarvam AI Smart Wearable Launch & HMD Partnership: Rediff Moneynews",
+      "summary": "February 19, 2026 - While speaking at India AI Impact Summit 2026, Sarvam Co-Founder Pratyush Kumar announced a partnership with multiple technology and mobile phone maker HMD to bring artificial intelligence technology to feature phones.",
+      "source": "money.rediff.com",
+      "url": "https://money.rediff.com/news/market/sarvam-ai-smart-wearable-launch-hmd-partnership/42270820260218",
+      "published": null,
+      "relevance_score": 0.41,
+      "trend_type": "news",
+      "segment": "brand_news"
+    },
+    {
+      "title": "Sarvam product launch | Sarvam AI",
+      "summary": "Sarvam Launches Revolutionary Full-Stack Generative AI Platform for India Bangalore, India: Tuesday, August 13, 2024-Sarvam AI, at the forefront of India's AI revolution, today announced the launch of its groundbreaking full-stack Generative AI (GenAI) platform. Designed to be voice-enabled and mult",
+      "source": "www.sarvam.ai",
+      "url": "https://www.sarvam.ai/blogs/sarvam-launch",
+      "published": null,
+      "relevance_score": 0.38,
+      "trend_type": "news",
+      "segment": "brand_news"
+    },
+    {
+      "title": "Sarvam AI Trillion Parameter Model: 12 New Products Confirmed",
+      "summary": "August 1, 2026 - At its Epoch 2026 developer conference in Bengaluru on 30 July 2026, the Indian AI startup confirmed it is building a foundational model with over one trillion parameters from scratch, designed to compete directly with OpenAI’s ChatGPT, Google’s ...",
+      "source": "bivashvlog.com",
+      "url": "https://bivashvlog.com/sarvam-ai-trillion-parameter-model-india",
+      "published": null,
+      "relevance_score": 0.36,
+      "trend_type": "news",
+      "segment": "brand_future"
+    },
+    {
+      "title": "Maruti Suzuki partners Sarvam AI, four startups to automate business operations - CRN Asia",
+      "summary": "Maruti Suzuki partners Sarvam AI, four startups to automate business operations &nbsp;&nbsp; CRN Asia",
+      "source": "Google News",
+      "url": "https://news.google.com/rss/articles/CBMiugFBVV95cUxOUUJhdklKODVTc0pzRnkyWXk5a2ltd1NtellzSHRmTkcyRXgyWlpDdmdzaG96aFRTeVU4eEYzLVdScjlyYktDR1BlYUpqbExBdmVGX3VtT1h1ZVpMQzZSOUFkV2p4bmpBUWlZcGtjOHJxMnhYT25DeGVlMVdLVzZTZHMzQjdZLVFPanZrQm10TGx3Mml0LVhHaS1oWFVMX3hxaEZKbWZ1RnhYZ25DMHZtYkVfQWwtLW9fNkE?oc=5",
+      "published": "Mon, 29 Jun 2026",
+      "relevance_score": 0.26,
+      "trend_type": "news",
+      "segment": "brand_news"
+    },
+    {
+      "title": "Open-Sourcing Sarvam 30B and 105B - Sarvam AI",
+      "summary": "Open-Sourcing Sarvam 30B and 105B &nbsp;&nbsp; Sarvam AI",
+      "source": "Google News",
+      "url": "https://news.google.com/rss/articles/CBMiVkFVX3lxTFA2UlItdkdVWlhMSTdPM1VEOHpPRV9yUmJENnVncUNoVDZSWGFMNEM1QVpOOElBczRmYTBORTNrZUpIc1BNZjJqR2NCSHBsbWRJd2RXazJB?oc=5",
+      "published": "Fri, 06 Mar 2026",
+      "relevance_score": 0.23,
+      "trend_type": "news",
+      "segment": "brand_news"
+    },
+    {
+      "title": "Sarvam AI launches Epoch Builder Edition, outlines plans to build Bharat’s first trillion-parameter AI model - HinduPost",
+      "summary": "Sarvam AI launches Epoch Builder Edition, outlines plans to build Bharat’s first trillion-parameter AI model &nbsp;&nbsp; HinduPost",
+      "source": "Google News",
+      "url": "https://news.google.com/rss/articles/CBMi4AFBVV95cUxONUpic08weW9PWWFreUhnbXE1YXF2Q2hneGVoQnlPc1MtNDNJbGtwekNDQ2pCdzFWejJKUkxWYlEzSi1MX2dzQ05rNW5wN0U2NnhOY0U5MnpmZG9ONzdtWmJnT3B0WEs2MmVfR2JzXzI0MWNYdkxYT053VXAzeGlHRnB2LXU5TmZ2bDJZbUpwenhsaWk1dW1KeDJGeUQ4MGVNSHhLMlAyYlo3b2NpMmhZTExtNHgydTRlNEpqUkVMSExhNG02MjVCb3R1WUNiaEFjdkx5RG9XWklKWFcxUUdSbA?oc=5",
+      "published": "Tue, 04 Aug 2026",
+      "relevance_score": 0.23,
+      "trend_type": "news",
+      "segment": "brand_news"
+    },
+    {
+      "title": "IDFC FIRST Bank x Sarvam | Self-Improving Bank - Sarvam AI",
+      "summary": "IDFC FIRST Bank x Sarvam | Self-Improving Bank &nbsp;&nbsp; Sarvam AI",
+      "source": "Google News",
+      "url": "https://news.google.com/rss/articles/CBMiWEFVX3lxTE9KRkU0VU9ydzdKUl9HeHFud3VPNUN1S21hLTQtcDJNOWdTY1hveEdZdXhQMEpSQm1EYnFFLUx1dDV2V1JITnMxVTd4eDFMY2tLdy0xR1FmWmU?oc=5",
+      "published": "Wed, 12 Aug 2026",
+      "relevance_score": 0.23,
+      "trend_type": "news",
+      "segment": "brand_news"
+    },
+    {
+      "title": "Sarvam Hits $1.5B: India's Sovereign-AI Unicorn (2026)",
+      "summary": "How much did Sarvam AI raise and at what valuation? Sarvam AI raised $234 million in the first close of a $300 million Series B, at a post-money valuation of $1.5 billion, announced on June 15, 2026. The first close alone made the Bengaluru company India's newest AI unicorn. Who led Sarvam's Series ",
+      "source": "theplanettools.ai",
+      "url": "https://theplanettools.ai/blog/sarvam-ai-unicorn-234-million-hcltech-sovereign-ai-india-2026",
+      "published": null,
+      "relevance_score": 0.23,
+      "trend_type": "news",
+      "segment": "brand_news"
+    },
+    {
+      "title": "Can India's Sarvam take on the Big Boys of AI?- Moneycontrol.com",
+      "summary": "August 2, 2026 - The company introduced Epoch Builder Edition, a platform for developers and enterprises to build, fine-tune and deploy AI models across more than 10 Indian languages using new 7-billion and 70-billion parameter models trained on 2 trillion tokens. It also launched Sarvam Vision 2.0 ",
+      "source": "www.moneycontrol.com",
+      "url": "https://www.moneycontrol.com/artificial-intelligence/can-india-s-sarvam-take-on-the-big-boys-of-ai-article-13990713.html",
+      "published": null,
+      "relevance_score": 0.18,
+      "trend_type": "news",
+      "segment": "brand_news"
+    },
+    {
+      "title": "Sarvam Bets Big On India's AI Future With Trillion-Parameter Model, Will Be Priced Five Times Cheaper Than Global Rivals",
+      "summary": "July 31, 2026 - Bengaluru-based Sarvam AI has announced plans to build a trillion-plus parameter foundation model entirely from scratch in India, positioning it to compete directly with frontier systems from OpenAI, Google, and Anthropic while undercutting ...",
+      "source": "www.freepressjournal.in",
+      "url": "https://www.freepressjournal.in/tech/sarvam-bets-big-on-indias-ai-future-with-trillion-parameter-model-will-be-priced-five-times-cheaper-than-global-rivals",
+      "published": null,
+      "relevance_score": 0.18,
+      "trend_type": "news",
+      "segment": "brand_future"
+    },
+    {
+      "title": "Sarvam holding AI event Epoch on July 30, teases new model updates and product launches - India Today",
+      "summary": "July 28, 2026 - NewsTechnologyNewsSarvam holding AI event Epoch on July 30, teases new model updates and product launches ... Sarvam AI is hosting Epoch in two days, here is what you can expect.",
+      "source": "www.indiatoday.in",
+      "url": "https://www.indiatoday.in/technology/news/story/sarvam-holding-ai-event-epoch-on-july-30-teases-new-model-updates-and-product-launches-2957900-2026-07-28",
+      "published": null,
+      "relevance_score": 0.15,
+      "trend_type": "news",
+      "segment": "brand_future"
+    },
+    {
+      "title": "Govt could get a minority stake in Sarvam through IndiaAI Mission support - MediaNama",
+      "summary": "Govt could get a minority stake in Sarvam through IndiaAI Mission support &nbsp;&nbsp; MediaNama",
+      "source": "Google News",
+      "url": "https://news.google.com/rss/articles/CBMiiAFBVV95cUxObTlBWXpTTFZFb1ZVaEY0V3VlWjdoQWxJbHpDRm04ZVZ4c2ZRbFU1ZnBjMnhIY0tVcVp5OUZQejRyb1ZGdkVrcmdmV3pnTkxnQ0R0MmFtR2xyV0cwaDhKeHZuMzJTM09YYVZCRTFYT01OM09KQ25CMjhWc0tNOS1RN25MTDNkVUdw?oc=5",
+      "published": "Thu, 25 Jun 2026",
+      "relevance_score": 0.05,
+      "trend_type": "news",
+      "segment": "brand_news"
+    }
+  ],
+  "key_themes": [
+    "sarvam",
+    "india",
+    "epoch",
+    "model",
+    "sovereign",
+    "models",
+    "trillion",
+    "build"
+  ],
+  "emerging_keywords": [
+    "sarvam",
+    "india",
+    "epoch",
+    "model",
+    "sovereign",
+    "models",
+    "trillion",
+    "build",
+    "launches",
+    "parameter",
+    "first",
+    "august"
+  ],
+  "article_angles": [
+    "From Silicon to Application: How Sarvam AI and C-DAC Are Constructing India’s Sovereign AI Stack",
+    "The Trillion-Parameter Ambition: Inside Sarvam AI’s Epoch 2026 Roadmap for Bharat’s Digital Future",
+    "Democratizing Voice: How Sarvam AI's Multilingual APIs Are Breaking Language Barriers in Indian Enterprise",
+    "Why Sarvam AI's Open-Source 30B and 105B Models Are a Turning Point for Indigenous Tech Development",
+    "Sovereign AI vs. Global Tech Giants: How Sarvam AI is Carving a $1.5 Billion Niche Against Silicon Valley",
+    "The Battle for India's LLM Dominance: Why Sarvam AI’s Localized Approach Outpaces Generic Global Models",
+    "Automating the Enterprise: What Maruti Suzuki’s Partnership with Sarvam AI Signals for Indian Industrial AI",
+    "Wearable AI Meets Localized Intelligence: Decoding the Sarvam AI and HMD Partnership",
+    "The Rise of Sovereign AI: Why HCLTech’s $150M Bet on Sarvam AI Redefines Global IT Services",
+    "No-Code, Voice-First: How Sarvam AI is Redefining Customer Engagement for India's Next Billion Users",
+    "Funding the Sovereign Future: What Sarvam AI’s $300M Series B Means for the Indian Deeptech Ecosystem"
+  ],
+  "brand_summary": "Sarvam AI has rapidly established itself as a cornerstone of India's indigenous AI ecosystem through the launch of its foundational Sarvam 30B and 105B models, alongside strategic enterprise partnerships with C-DAC, HCLTech, and Maruti Suzuki. Looking forward, the company's aggressive roadmap toward a trillion-parameter model and sovereign infrastructure at Epoch 2026 signals its trajectory to become India's premier $1.5 billion sovereign AI unicorn.",
+  "segments": {
+    "brand_future": 8,
+    "brand_news": 17
+  },
+  "model_used": "gemini-3.5-flash"
+}
